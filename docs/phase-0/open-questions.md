@@ -20,7 +20,7 @@ the background on each one.
 | # | Question | Why it matters |
 | - | - | - |
 | B1 | Which jurisdiction will live trading run from (operator location **and** server location)? | Order placement is prohibited from the US, Canada and others (§4). This decides where the live process runs, and whether live trading is possible at all. |
-| B2 | Is the existing wallet's EOA already registered for Perps (`GET /v1/info/registered?address=<EOA>`)? If not, is an invite code needed? | The first `createProxy` registers the account. An invite/referral `code` field exists but its necessity is undocumented. **2026-10-19:** the address supplied (`0x20a4…f12d`) is not registered. Still to confirm whether it is the signing EOA or the Polymarket wallet (Safe/proxy) address. |
+| B2 | Is the existing wallet's EOA already registered for Perps (`GET /v1/info/registered?address=<EOA>`)? If not, is an invite code needed? | The first `createProxy` registers the account. An invite/referral `code` field exists but its necessity is undocumented. **2026-10-19:** neither supplied address (`0x20a4…f12d`, `0xD3Cf…e7Ba`) is registered, so no Perps account exists yet. The account is email-based, so the signing EOA is the email-login wallet. Registration happens on first Perps onboarding (owner action). |
 
 ## Needed before Phase 1 sign-off
 
