@@ -4,6 +4,17 @@ Items that block or shape Phase 1. Each needs an answer from the project owner o
 a check against the live account. See [venue-research.md](venue-research.md) for
 the background on each one.
 
+## Decisions so far (2026-10-19)
+
+| Topic | Decision |
+| - | - |
+| Trading universe | Configurable list of symbols. Initial list: `NVDA-USD`. |
+| Trading window | First 3 hours after the US regular-session open (09:30–12:30 America/New_York), exchange trading days only. |
+| LLM | Claude. |
+| Funding and withdrawals | Out of scope for the bot. The owner handles them manually; the bot never holds the owner key. |
+| Live-trading location | Unknown. Build with the live-trading gate off until it is decided (B1). |
+| Capital, drawdown, leverage | Deferred to Phase 1 (architecture). |
+
 ## Blocking
 
 | # | Question | Why it matters |
