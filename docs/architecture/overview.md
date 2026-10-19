@@ -19,7 +19,7 @@ recorded as ADRs in [`docs/adr/`](../adr/README.md). Phase gates are defined in
 | Trading window | 09:30–12:30 America/New_York, NYSE trading days. On half-days the window ends at the earlier of 12:30 and the session close. |
 | Flat by | 12:30, retrying until a hard cutoff (12:35) and alerting if anything is still open |
 | Direction | Long and short |
-| Positions | At most one per symbol; no adding to a position in v1 |
+| Positions | At most one position per symbol. The agent may add to a winning position and manage it actively (partial exits, trailing stops, runners) within risk rules (ADR-0009). |
 | Agent | Claude, running in Claude Code |
 | Agent inputs (v1) | Polymarket market data only. News and web search are later versions. |
 | Funding / withdrawals | Out of scope. Owner-managed; the bot never holds the owner key. |
@@ -132,7 +132,11 @@ uses a small tool surface served by the engine:
 | `get_portfolio()` | Positions, open orders, PnL, remaining risk budget |
 | `list_playbooks()` | Available playbooks, their current trigger state and parameter limits |
 | `propose_trade(intent)` | Submit a `TradeIntent`. Returns the risk verdict (approved / resized / rejected, with reasons). |
-| `adjust_protection(symbol, stop, target)` | Tighten a stop or move a target, within risk rules |
+| `adjust_protection(symbol, stop, target)` | Tighten a stop or move/remove a target, within risk rules |
+| `update_exit_plan(symbol, plan)` | Replace the position's exit plan (scale-outs, breakeven rule, trailing rule) at any time |
+| `set_trailing_stop(symbol, rule)` | Start or change the trailing rule the engine applies continuously |
+| `add_to_position(symbol, intent)` | Add size to a profitable position (same risk checks as a new trade, plus §3.7 rule 10) |
+| `reduce_position(symbol, fraction, reason)` | Partial exit |
 | `close_position(symbol, reason)` | Exit now |
 | `journal(note)` | Record reasoning that isn't tied to an action |
 
@@ -142,8 +146,14 @@ uses a small tool surface served by the engine:
 symbol, side (long|short), source (playbook:<id> | discretionary),
 entry (limit price | marketable), size (fraction of the per-trade risk budget, 0–1),
 stop_price (required), target_price (optional), time_stop (optional),
+exit_plan (optional: scale-out steps, breakeven trigger, trailing rule),
 thesis (text), confidence (0–1)
 ```
+
+Exit plans and trailing rules are chosen by the agent case by case; the
+engine provides a vocabulary of rule types (volatility-based distance,
+structure-based such as swing lows/highs or opening-range levels, VWAP-based,
+fixed distance, breakeven-after-R) that the agent combines and parameterizes.
 
 The agent sizes trades in **risk units, not quantity**. The risk engine converts
 a risk budget plus the stop distance into a quantity, so the agent cannot
@@ -205,9 +215,17 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
    for the day** (exits still allowed).
 9. Venue order validation: price/quantity precision, 5 significant figures, ±10%
    price band, min notional (§5).
+10. **Adding to a position** is allowed only while the position is in profit, and
+    only if the combined risk (all entries to the current stop) stays within the
+    position's approved risk budget. In practice the stop must already protect the
+    earlier entries.
+11. **Stops only tighten.** Any stop change (manual or trailing) that would move the
+    stop against the position, or remove it, is rejected. Runners are let run by
+    not taking profit, never by widening risk.
 
 Continuous checks: stale data halts entries; a position without a confirmed stop
-gets an immediate protective stop or is closed.
+gets an immediate protective stop or is closed. The 12:30 close-out applies to
+runners with no exceptions.
 
 ### 3.8 Execution (`execution/`)
 
@@ -219,6 +237,12 @@ gets an immediate protective stop or is closed.
   In live mode it is the exchange-side position TP/SL (mark-triggered, §10), so
   protection survives a crash of the agent, the engine or the session. In paper
   mode the simulator emulates the same mark-triggered behaviour.
+* **Engine-run trailing and exit plans:** the engine evaluates the active trailing
+  rule and exit plan on every relevant update, independently of when the agent
+  wakes. Stop moves are rate-limited and only tighten. On the venue a position
+  stop is replaced by cancel-then-create, which is not atomic, so during the
+  replacement the engine itself watches mark against the stop and exits if it is
+  crossed.
 * Client order IDs (32-hex) on every order for idempotency and reconciliation.
 * Live mode keeps the exchange **dead man's switch** armed while any order rests,
   re-arming every 20 s with a 60 s deadline, and disarms it on clean shutdown.
