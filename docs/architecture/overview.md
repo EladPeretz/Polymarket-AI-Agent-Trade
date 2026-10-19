@@ -24,6 +24,7 @@ recorded as ADRs in [`docs/adr/`](../adr/README.md). Phase gates are defined in
 | Agent inputs (v1) | Polymarket market data only. News and web search are later versions. |
 | Funding / withdrawals | Out of scope. Owner-managed; the bot never holds the owner key. |
 | Capital and risk numbers | To be set when the trading framework is built (Phase 2). The architecture only defines the *rules*; values live in config. |
+| Historical data | Polymarket only, rolling ~3-month window. Strategies are expected to change every few months (ADR-0008). |
 
 ## 2. Runtime modes
 
@@ -98,10 +99,18 @@ known dev/CI environments.
 * **Features** are computed every update: opening range (first N minutes), session
   VWAP, gap vs previous close (from index/mark history), realized volatility,
   spread and depth, funding rate, distance to the opening-range levels.
+* **Regime context** classifies the session as it develops: e.g. *expansion*
+  (wide opening range vs recent average, large gap, high realized volatility),
+  *compressed* (narrow range, low volatility), *trend* vs *rotation* (range
+  extension vs repeated VWAP crosses). Regime labels are features. The agent sees
+  them, and every trade and backtest result is tagged with them (ADR-0008).
 * **Playbooks** are coded, parameterized trade setups (e.g. opening-range
   breakout, VWAP reversion, gap fade). Each has a precise trigger condition,
-  default stop/target logic and a parameter schema. Playbooks are pure functions
-  of features, so they can be backtested without an LLM.
+  default stop/target logic, a parameter schema, and the **regimes it is designed
+  for** (a momentum playbook declares expansion/trend; it is not judged on
+  compressed sessions). Playbooks are pure functions of features, so they can be
+  backtested without an LLM. Each playbook has a version; any parameter or logic
+  change creates a new version, and results are attributed per version.
 * **Trigger detector** turns market activity into agent wake-ups:
   * a playbook condition became true,
   * a large move (configurable: N× short-horizon volatility, or X bp in Y seconds),
@@ -287,8 +296,11 @@ Code session started by the server's scheduler.
 3. **Simulation tests**: scripted market scenarios (gap, spike, stale feed,
    reconnect, partial fills) driving the full engine with a scripted fake agent,
    asserting that risk and guardian rules hold.
-4. **Playbook backtests** (no LLM): historical data; walk-forward parameter
-   selection; results include fees and funding.
+4. **Playbook backtests** (no LLM): a rolling ~3-month window of Polymarket data,
+   segmented by regime, with fees and funding. They are a **sanity screen, not
+   proof**: they check that a playbook behaves as designed in the regimes it targets
+   and doesn't bleed in them. Re-run on every playbook version and on a regular
+   cadence as the window rolls (ADR-0008).
 5. **LLM evaluation is forward-only.** Backtesting Claude on past dates is not
    meaningful, because the model may already know what happened on those dates.
    The agent's value is measured in paper trading, attributed per autonomy level.

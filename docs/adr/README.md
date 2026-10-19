@@ -13,6 +13,7 @@ ADR that supersedes the old one.
 | [0005](0005-paper-fill-simulator.md) | Conservative in-house fill simulator for paper trading | Proposed |
 | [0006](0006-results-on-git-branch.md) | Paper results persisted to a `paper-results` git branch | Proposed |
 | [0007](0007-engineering-workflow.md) | Engineering workflow: protected main, PRs, CI, phase tags | Proposed |
+| [0008](0008-short-window-regime-aware-evaluation.md) | Short-window, regime-aware strategy evaluation with frequent iteration | Proposed |
 
 Template: copy an existing ADR and keep the headings *Context*, *Decision*,
 *Consequences*.

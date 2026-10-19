@@ -7,17 +7,27 @@ to the previous tagged version. The criteria are fixed here, before results exis
 so the decision is objective. Values marked *TBD* depend on capital and are set
 when the trading framework is built. They must be set before the gate that uses them.
 
-## Gate 1 — Playbook backtest (end of Phase 2 development)
+## Gate 1 — Playbook screen (before a playbook version enters paper trading)
 
-A playbook may run in paper trading only if its backtest (fees and funding
-included, walk-forward, no in-sample parameter selection) shows:
+Backtesting here is a screen, not proof (ADR-0008). History is short (rolling
+~3 months of Polymarket data) and strategies are expected to change every few
+months. So the gate asks "does this playbook version behave as designed **in the
+market conditions it is built for**?", not "is it profitable on all history?".
 
-* positive net expectancy per trade after costs,
-* profit factor > 1.1,
-* at least 30 trades in the test period,
-* no single trade contributing more than 25% of total net PnL.
+For each new playbook version, over the rolling window, **restricted to sessions
+whose regime matches the playbook's declared regimes** (e.g. a momentum playbook is
+not judged on compressed sessions):
 
-Playbooks that fail stay available at `L0` (filter) only, or are dropped.
+* the trigger fires on the setups it describes (reviewed sample of trades/charts),
+* net expectancy after fees and funding is not negative,
+* no single trade accounts for more than 25% of net PnL,
+* in non-target regimes the playbook either does not fire or is gated off by its
+  regime filter.
+
+The result is recorded with the playbook version and the regime breakdown. A
+version that fails stays out of paper trading, or runs at `L0` (filter) only.
+Trade counts are reported, not required: a thin sample is acceptable because paper
+trading is the main evidence.
 
 ## Gate 2 — Paper trading → live pilot (end of Phase 3 simulation)
 
@@ -25,7 +35,7 @@ All of the following, measured on paper trading with the live data feed:
 
 | Criterion | Threshold |
 | - | - |
-| Duration | ≥ 20 trading days |
+| Duration | ≥ 20 trading days (playbook/parameter changes don't reset the count; changes to risk, execution or guardian code restart the safety criteria) |
 | Net PnL after fees and funding | > 0 |
 | Profit factor (gross wins ÷ gross losses) | > 1.2 |
 | Maximum drawdown | < *TBD* % of paper equity |
@@ -34,7 +44,7 @@ All of the following, measured on paper trading with the live data feed:
 | Window close-outs completed by 12:35 | 100% of days |
 | Sessions completed without manual intervention | ≥ 95% of trading days |
 
-Also reported, but not gating: per-autonomy-level results (`L0`/`L1`/`L2`), win
+Also reported, but not gating: results per autonomy level (`L0`/`L1`/`L2`), per playbook version and per regime, win
 rate, average win/loss, average agent latency per event, and LLM usage.
 
 ## Gate 3 — Live pilot → normal live operation
