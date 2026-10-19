@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets — never commit keys, proxy secrets or wallet material
+.env
+.env.*
+!.env.example
+*.key
+secrets/
+
+# Local data
+data/
+*.parquet
