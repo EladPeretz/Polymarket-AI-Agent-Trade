@@ -9,7 +9,7 @@ override.
 | Phase | Goal | Status |
 | - | - | - |
 | 0 — Venue research | Read the venue docs, probe the live API, list blockers and gaps | **Done** — see [`docs/phase-0/`](docs/phase-0/) |
-| 1 — Architecture | System design, ADRs, go/no-go criteria for the merge decision | Next |
+| 1 — Architecture | System design, ADRs, go/no-go criteria for the merge decision | **In review** — see [`docs/architecture/`](docs/architecture/overview.md), [`docs/adr/`](docs/adr/README.md) |
 | 2 — Development | Exchange adapter, risk engine, agent framework, data recorder | — |
 | 3 — Simulation testing | Backtests → paper trading on live feeds → small live capital | — |
 | Decision | Merge and continue, or fall back to the previous tagged version | — |
