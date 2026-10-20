@@ -3,7 +3,7 @@ import json
 import yaml
 
 from perps_agent.app.cli import main
-from tests.conftest import COMPLETE_RISK, REPO_ROOT
+from tests.conftest import COMPLETE_RISK, COMPLETE_SIM, REPO_ROOT
 
 
 def test_config_check_warns_but_succeeds_on_repo_defaults(capsys):
@@ -19,7 +19,7 @@ def test_config_check_strict_fails_when_not_ready():
 
 
 def test_config_check_strict_passes_when_ready(write_config, capsys):
-    path = write_config({"risk": COMPLETE_RISK})
+    path = write_config({"risk": COMPLETE_RISK, "sim": COMPLETE_SIM})
     assert main(["config-check", "--config", str(path), "--strict"]) == 0
     assert "ready for paper mode" in capsys.readouterr().err
 
