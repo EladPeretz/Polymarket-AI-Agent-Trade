@@ -39,6 +39,28 @@ market:
   record: true
   recording_dir: data/recordings   # git-ignored; raw recordings are not published
 
+# Features and regime labels (docs/architecture/overview.md §3.4). Not learnable.
+features:
+  opening_range_minutes: 15
+  profile_bucket_bp: 5              # volume-profile bucket width, bp of the session open
+  value_area_fraction: 0.7
+  realized_vol_minutes: 60          # 1-minute returns behind the expected move to 12:30
+  history_sessions: 10              # prior sessions for ticker profile and key levels
+  expansion_ratio: 1.3              # session range vs usual for the time elapsed
+  compressed_ratio: 0.7
+  trend_efficiency: 0.5             # net move / range for a trend
+  max_trend_vwap_crosses: 3
+  regime_min_minutes: 15            # no regime label before this
+
+# Agent wake-ups besides playbook signals and the check-in (overview §3.4).
+triggers:
+  large_move_seconds: 60
+  large_move_sigma: 3               # × 1-minute volatility scaled to large_move_seconds
+  large_move_min_bp: 15             # and at least this many bp
+  approaching_stop_fraction: 0.25   # share of the entry-to-stop distance left
+  approaching_target_fraction: 0.8  # share of the way to the target
+  time_stop_warning_minutes: 2
+
 # Risk rules (docs/architecture/overview.md §3.7). Capital-dependent values are
 # set by the owner; the engine refuses to start while any are null.
 risk:
@@ -50,7 +72,8 @@ risk:
   max_trades_per_day: 12
   max_l2_trades_per_day: 4
   l2_risk_fraction: 0.5             # L2 trades use this share of the per-trade budget
-  min_stop_distance_bp: 20
+  min_stop_distance_bp: 20          # absolute stop floor
+  stop_floor_range_multiple: 1      # stop ≥ this × the symbol's recent 15-minute range (WP9)
   max_spread_bp: 6
   min_top_of_book_notional: 2000    # pUSD
   liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance

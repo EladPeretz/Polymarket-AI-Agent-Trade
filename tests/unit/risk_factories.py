@@ -40,6 +40,8 @@ RISK = RiskConfig(
     stop_slippage_bp=D(5),
     min_reward_risk=D(2),
 )
+# A calm 15-minute range (15 bp of 200), so the 20 bp floor is the binding one.
+RANGE_15M = D("0.30")
 # Tier 0, as config/default.yaml's sim section.
 FEES = FeeRates(taker=D("0.0004"), maker=D("0.000125"))
 

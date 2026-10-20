@@ -87,3 +87,14 @@ def sweep_price(levels: Sequence[BookLevel], quantity: Decimal) -> tuple[Decimal
         if total >= quantity:
             return level.price, total
     return levels[-1].price, total
+
+
+def stop_floor(
+    entry: Decimal, range_15m: Decimal, *, min_distance_bp: Decimal, range_multiple: Decimal
+) -> Decimal:
+    """The closest a stop may sit to ``entry`` (price units): the volatility stop floor.
+
+    At least ``range_multiple`` times the symbol's recent 15-minute range, and
+    never closer than ``min_distance_bp`` (the absolute noise floor).
+    """
+    return max(entry * min_distance_bp / 10_000, range_15m * range_multiple)

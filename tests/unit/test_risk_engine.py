@@ -18,6 +18,7 @@ from perps_agent.risk import (
 from perps_agent.venue import Side, TimeInForce
 from tests.unit.risk_factories import (
     NOW,
+    RANGE_15M,
     RISK,
     engine,
     intent,
@@ -30,12 +31,23 @@ from tests.unit.venue_factories import instrument
 D = Decimal
 
 
-def _evaluate(trade=None, *, snap=None, account=None, at=NOW, instr=None, risk=RISK, symbols=None):
+def _evaluate(
+    trade=None,
+    *,
+    snap=None,
+    account=None,
+    at=NOW,
+    instr=None,
+    risk=RISK,
+    symbols=None,
+    range_15m=RANGE_15M,
+):
     return engine(risk, symbols).evaluate(
         trade or intent(),
         instrument=instr or instrument(),
         snapshot=snap or snapshot(),
         state=account or state(),
+        range_15m=range_15m,
         now=at,
     )
 
@@ -155,10 +167,20 @@ def test_too_small_after_sizing_is_rejected():
 def test_order_ids_are_fresh_32_hex():
     risk_engine = engine()
     first = risk_engine.evaluate(
-        intent(), instrument=instrument(), snapshot=snapshot(), state=state(), now=NOW
+        intent(),
+        instrument=instrument(),
+        snapshot=snapshot(),
+        state=state(),
+        range_15m=RANGE_15M,
+        now=NOW,
     )
     second = risk_engine.evaluate(
-        intent(), instrument=instrument(), snapshot=snapshot(), state=state(), now=NOW
+        intent(),
+        instrument=instrument(),
+        snapshot=snapshot(),
+        state=state(),
+        range_15m=RANGE_15M,
+        now=NOW,
     )
     assert first.order is not None and second.order is not None
     assert first.order.client_order_id != second.order.client_order_id
@@ -283,6 +305,39 @@ def test_stop_on_the_wrong_side_is_rejected():
 def test_stop_inside_the_noise_floor_is_rejected():
     verdict = _evaluate(intent(stop="199.70"))  # 15 bp < 20 bp
     assert _checks(verdict) == {RiskCheck.STOP_DISTANCE}
+
+
+def test_stop_inside_the_volatility_floor_is_rejected():
+    # The 15-minute range is 0.80 (40 bp): a 30 bp stop clears 20 bp but not the range.
+    verdict = _evaluate(intent(stop="199.40"), range_15m=D("0.80"))
+    assert _checks(verdict) == {RiskCheck.STOP_VOLATILITY}
+    assert _evaluate(intent(stop="199.20"), range_15m=D("0.80")).approved
+    short = _evaluate(intent(Direction.SHORT, stop="200.60"), range_15m=D("0.80"))
+    assert _checks(short) == {RiskCheck.STOP_VOLATILITY}
+
+
+def test_volatility_floor_scales_with_the_configured_multiple():
+    risk = RISK.model_copy(update={"stop_floor_range_multiple": D("1.5")})
+    # 1.5 × 0.80 = 1.20 from entry.
+    assert not _evaluate(intent(stop="198.90"), range_15m=D("0.80"), risk=risk).approved
+    assert _evaluate(intent(stop="198.80"), range_15m=D("0.80"), risk=risk).approved
+
+
+def test_20_bp_stays_the_absolute_floor_in_a_quiet_market():
+    verdict = _evaluate(intent(stop="199.70"), range_15m=D("0.01"))
+    assert _checks(verdict) == {RiskCheck.STOP_DISTANCE}
+    assert engine().min_stop_distance(D(200), D("0.01")) == D("0.4")
+
+
+def test_unknown_15_minute_range_fails_closed():
+    verdict = _evaluate(range_15m=None)
+    assert verdict.decision is Decision.REJECTED
+    assert _checks(verdict) == {RiskCheck.STOP_VOLATILITY}
+
+
+def test_volatility_floor_applies_to_adds():
+    verdict = _add(range_15m=D("1.50"))
+    assert _checks(verdict) == {RiskCheck.STOP_VOLATILITY}
 
 
 def test_stop_is_rounded_away_from_the_entry():
@@ -447,13 +502,14 @@ def test_loss_per_unit_counts_entry_and_exit_costs():
 # --- Adding to a position (rule 10) ---
 
 
-def _add(trade=None, *, held=None, account=None):
+def _add(trade=None, *, held=None, account=None, range_15m=RANGE_15M):
     held = held or position(stop="199", approved_risk="7")
     return engine().evaluate_add(
         trade or intent(entry="200", stop="199"),
         instrument=instrument(),
         snapshot=snapshot(),
         state=account or state(positions=(held,)),
+        range_15m=range_15m,
         now=NOW,
     )
 
@@ -555,3 +611,8 @@ def test_limit_entry_price_rounds_passively():
 def test_verdict_round_trips_as_json():
     verdict = _evaluate()
     assert RiskVerdict.model_validate_json(verdict.model_dump_json()) == verdict
+
+
+def test_stop_floor_multiple_cannot_go_below_the_range():
+    with pytest.raises(ValidationError):
+        RiskConfig(stop_floor_range_multiple=D("0.5"))

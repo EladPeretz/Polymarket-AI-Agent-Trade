@@ -12,10 +12,12 @@ at once. Rules, by the numbers of §3.7:
    instrument not close-only or settled.
 2. Snapshot fresh and no older than ``max_snapshot_age_ms``; spread within
    ``max_spread_bp``; top-of-book notional on both sides ≥ ``min_top_of_book_notional``.
-3. Stop on the correct side and at least ``min_stop_distance_bp`` from entry;
-   target, if any, on the correct side and worth at least ``min_reward_risk``
-   times the risk (both after costs, at the final entry price); time stop
-   inside the window.
+3. Stop on the correct side and at least the volatility stop floor from
+   entry: ``stop_floor_range_multiple`` × the symbol's recent 15-minute range,
+   and never closer than ``min_stop_distance_bp``. Without a 15-minute range
+   the floor is unknown and the intent is rejected. Target, if any, on the
+   correct side and worth at least ``min_reward_risk`` times the risk (both
+   after costs, at the final entry price); time stop inside the window.
 4. ``qty = budget × size / loss per unit``, rounded down, where the loss per
    unit is ``|entry − stop|`` plus the entry fee and the stop's taker fee and
    ``stop_slippage_bp``; notional ≥ the venue minimum and ≤
@@ -62,6 +64,7 @@ from perps_agent.risk.sizing import (
     loss_per_unit,
     max_leverage_for_stop,
     quantity_for_risk,
+    stop_floor,
     sweep_price,
 )
 from perps_agent.risk.state import PositionRisk, RiskState
@@ -88,6 +91,7 @@ class RiskCheck(StrEnum):
     DAILY_LOSS = "daily_loss"
     STOP_SIDE = "stop_side"
     STOP_DISTANCE = "stop_distance"
+    STOP_VOLATILITY = "stop_volatility"
     STOP_WIDENED = "stop_widened"
     TARGET_SIDE = "target_side"
     REWARD_RISK = "reward_risk"
@@ -189,10 +193,17 @@ class RiskEngine:
         instrument: Instrument,
         snapshot: MarketSnapshot,
         state: RiskState,
+        range_15m: Decimal | None,
         now: datetime,
     ) -> RiskVerdict:
-        """Check a new position's entry."""
-        return self._evaluate(intent, instrument, snapshot, state, to_utc(now), adding=False)
+        """Check a new position's entry.
+
+        ``range_15m`` is the symbol's recent 15-minute high-low range from the
+        engine's features (never from the agent), for the volatility stop floor.
+        """
+        return self._evaluate(
+            intent, instrument, snapshot, state, range_15m, to_utc(now), adding=False
+        )
 
     def evaluate_add(
         self,
@@ -201,6 +212,7 @@ class RiskEngine:
         instrument: Instrument,
         snapshot: MarketSnapshot,
         state: RiskState,
+        range_15m: Decimal | None,
         now: datetime,
     ) -> RiskVerdict:
         """Check an add to an open, profitable position (rule 10).
@@ -208,7 +220,9 @@ class RiskEngine:
         ``intent.stop_price`` becomes the whole position's stop, so it may only
         be at or tighter than the current one.
         """
-        return self._evaluate(intent, instrument, snapshot, state, to_utc(now), adding=True)
+        return self._evaluate(
+            intent, instrument, snapshot, state, range_15m, to_utc(now), adding=True
+        )
 
     def entries_halted(self, state: RiskState) -> bool:
         """True once the daily loss limit is reached (rule 8)."""
@@ -236,6 +250,16 @@ class RiskEngine:
             Decimal(0),
         )
         return self._daily_loss_limit(state) + state.day_pnl - open_risk - state.pending_risk
+
+    def min_stop_distance(self, entry: Decimal, range_15m: Decimal) -> Decimal:
+        """The volatility stop floor at ``entry`` (rule 3), in price units."""
+        assert self._config.min_stop_distance_bp is not None
+        return stop_floor(
+            entry,
+            range_15m,
+            min_distance_bp=self._config.min_stop_distance_bp,
+            range_multiple=self._config.stop_floor_range_multiple,
+        )
 
     def order_risk(
         self, quantity: Decimal, price: Decimal, stop: Decimal, *, post_only: bool
@@ -275,6 +299,7 @@ class RiskEngine:
         instrument: Instrument,
         snapshot: MarketSnapshot,
         state: RiskState,
+        range_15m: Decimal | None,
         now: datetime,
         *,
         adding: bool,
@@ -304,7 +329,9 @@ class RiskEngine:
         mark = snapshot.mark_price
         if snapshot.best_bid is None or snapshot.best_ask is None or mark is None:
             return rejected()
-        prices = self._check_prices(intent, instrument, snapshot, position, now, adding, reject)
+        prices = self._check_prices(
+            intent, instrument, snapshot, position, range_15m, now, adding, reject
+        )
         if problems or prices is None:
             return rejected()
 
@@ -539,6 +566,7 @@ class RiskEngine:
         instrument: Instrument,
         snapshot: MarketSnapshot,
         position: PositionRisk | None,
+        range_15m: Decimal | None,
         now: datetime,
         adding: bool,
         reject: Callable[[RiskCheck, str], None],
@@ -564,12 +592,26 @@ class RiskEngine:
             reject(RiskCheck.STOP_SIDE, f"stop {stop} is not on the losing side of entry {entry}")
             ok = False
         else:
-            distance_bp = abs(entry - stop) / entry * 10_000
+            distance = abs(entry - stop)
+            distance_bp = distance / entry * 10_000
             if distance_bp < self._config.min_stop_distance_bp:
                 reject(
                     RiskCheck.STOP_DISTANCE,
                     f"stop is {distance_bp:.1f} bp away, minimum "
                     f"{self._config.min_stop_distance_bp} bp",
+                )
+                ok = False
+            elif range_15m is None:
+                reject(
+                    RiskCheck.STOP_VOLATILITY,
+                    "no recent 15-minute range, so the volatility stop floor is unknown",
+                )
+                ok = False
+            elif distance < (floor := self.min_stop_distance(entry, range_15m)):
+                reject(
+                    RiskCheck.STOP_VOLATILITY,
+                    f"stop is {distance} away, inside the volatility floor {floor:.4f} "
+                    f"({self._config.stop_floor_range_multiple} × the 15-minute range {range_15m})",
                 )
                 ok = False
         if adding and position is not None and (stop - position.stop_price) * sign < 0:

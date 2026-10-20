@@ -21,7 +21,7 @@ from perps_agent.venue import (
     Trade,
     TradesEvent,
 )
-from tests.unit.risk_factories import NOW, engine, snapshot
+from tests.unit.risk_factories import NOW, RANGE_15M, engine, snapshot
 from tests.unit.venue_factories import instrument
 
 D = Decimal
@@ -134,6 +134,7 @@ class Desk:
             instrument=instrument(),
             snapshot=snapshot(bid=self.bid, ask=self.ask, mark=self.mark, taken_at=self.clock.now),
             state=state,
+            range_15m=RANGE_15M,
             now=self.clock.now,
         )
 

@@ -142,6 +142,9 @@ class RiskConfig(_Model):
     max_l2_trades_per_day: Annotated[int, Field(ge=0)] | None = None
     l2_risk_fraction: Fraction = Decimal("0.5")
     min_stop_distance_bp: PositiveDecimal | None = None
+    # Volatility stop floor: a stop is at least this many times the symbol's
+    # recent 15-minute range from entry (and never closer than min_stop_distance_bp).
+    stop_floor_range_multiple: Annotated[Decimal, Field(ge=1, le=5)] = Decimal(1)
     max_spread_bp: PositiveDecimal | None = None
     min_top_of_book_notional: PositiveDecimal | None = None
     # Stop must be at most this fraction of the distance from entry to liquidation.
@@ -156,6 +159,43 @@ class RiskConfig(_Model):
 
     def unset_fields(self) -> list[str]:
         return sorted(name for name, value in self if value is None)
+
+
+class FeaturesConfig(_Model):
+    """Feature and regime computation (overview §3.4). Not learnable (ADR-0010)."""
+
+    opening_range_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+    # Width of a volume-profile price bucket, in bp of the session open.
+    profile_bucket_bp: Annotated[Decimal, Field(gt=0, le=100)] = Decimal(5)
+    value_area_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.7")
+    # 1-minute returns used for realized volatility and the expected move.
+    realized_vol_minutes: Annotated[int, Field(ge=10, le=240)] = 60
+    # Prior sessions loaded for ticker performance, character and key levels.
+    history_sessions: Annotated[int, Field(ge=2, le=40)] = 10
+    # Regime: session range so far vs the usual range for the time elapsed.
+    expansion_ratio: Annotated[Decimal, Field(gt=1, le=5)] = Decimal("1.3")
+    compressed_ratio: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.7")
+    # Regime: a trend moves at least this share of its range net, and crosses
+    # VWAP at most this often.
+    trend_efficiency: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.5")
+    max_trend_vwap_crosses: Annotated[int, Field(ge=0, le=50)] = 3
+    # No regime label before this much of the session has traded.
+    regime_min_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+
+
+class TriggersConfig(_Model):
+    """When the engine wakes the agent (overview §3.4). The check-in interval is in ``agent``."""
+
+    # A large move: at least large_move_sigma × the 1-minute volatility scaled
+    # to large_move_seconds, and at least large_move_min_bp.
+    large_move_seconds: Annotated[int, Field(ge=5, le=900)] = 60
+    large_move_sigma: Annotated[Decimal, Field(gt=0, le=20)] = Decimal(3)
+    large_move_min_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(15)
+    # Position events: the stop is this close (share of the entry-to-stop
+    # distance left), the target this far along, or the time stop this near.
+    approaching_stop_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.25")
+    approaching_target_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.8")
+    time_stop_warning_minutes: Annotated[int, Field(ge=0, le=30)] = 2
 
 
 class SimConfig(_Model):
@@ -220,6 +260,8 @@ class AppConfig(_Model):
     session: SessionConfig = SessionConfig()
     agent: AgentConfig = AgentConfig()
     market: MarketDataConfig = MarketDataConfig()
+    features: FeaturesConfig = FeaturesConfig()
+    triggers: TriggersConfig = TriggersConfig()
     risk: RiskConfig = RiskConfig()
     sim: SimConfig = SimConfig()
     execution: ExecutionConfig = ExecutionConfig()
