@@ -298,6 +298,31 @@ def test_target_on_the_wrong_side_is_rejected():
     assert _evaluate(intent(target_price=D(203))).target_price == D(203)
 
 
+def test_a_target_must_be_worth_two_r_after_costs():
+    # Risk 1.2591 per unit. To 203: 3 − 0.08 entry fee − 203 × 9 bp = 2.7373, 2.17R.
+    assert _evaluate(intent(target_price=D(203))).approved
+    # To 202.70: 2.70 − 0.08 − 0.1824 = 2.4376, 1.94R.
+    verdict = _evaluate(intent(target_price=D("202.70")))
+    assert verdict.decision is Decision.REJECTED
+    assert _checks(verdict) == {RiskCheck.REWARD_RISK}
+    # No target: a runner, allowed.
+    assert _evaluate(intent()).approved
+    # The minimum is configurable.
+    looser = RISK.model_copy(update={"min_reward_risk": D("1.5")})
+    assert _evaluate(intent(target_price=D("202.70")), risk=looser).approved
+
+
+def test_reward_is_measured_from_the_swept_entry():
+    # To 203 from the best ask, 200.02: 2.12R. But 14 pUSD of size sweeps to 200.10,
+    # from where it is 2.637 / 1.3592 = 1.94R.
+    trade = intent(entry=None, stop="199", target_price=D(203))
+    deep = snapshot(asks=(("200.02", "100"), ("200.10", "30")))
+    thin = snapshot(asks=(("200.02", "10"), ("200.10", "30")))
+    assert _evaluate(trade, snap=deep, account=state("2000")).approved
+    swept = _evaluate(trade, snap=thin, account=state("2000"))
+    assert _checks(swept) == {RiskCheck.REWARD_RISK}
+
+
 def test_time_stop_must_be_inside_the_window():
     late = _evaluate(intent(time_stop=NOW.replace(hour=17)))  # 13:00 New York
     assert _checks(late) == {RiskCheck.TIME_STOP}
