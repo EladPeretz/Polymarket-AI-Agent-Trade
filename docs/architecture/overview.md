@@ -112,10 +112,19 @@ known dev/CI environments.
 
 ### 3.3 Session calendar (`calendar/`)
 
-* NYSE trading days, holidays and half-days, computed locally (the API does not
-  expose sessions, §6).
+* NYSE trading days, holidays and half-days, computed locally from the exchange
+  rules (the API does not expose sessions, §6). The rules are verified for
+  2022–2030 against NYSE's published lists; other years raise rather than guess.
+  Unscheduled closures (e.g. a day of mourning) go in `SPECIAL_CLOSURES` or
+  `session.extra_closures` in the config.
 * Provides `trading_window(date)`, `is_entry_allowed(now)` (no new entries after a
-  configurable cutoff, default 12:15) and `must_be_flat(now)`.
+  configurable cutoff, default 12:15) and `must_be_flat(now)`, which is true
+  whenever `now` is outside the window, so positions only exist inside it. On
+  13:00 early-close days the window is capped at the close.
+* `session_at(now)` labels the underlying's session (premarket, regular,
+  postmarket, overnight, weekend, closed) for session-aware features and limits.
+* `perps-agent calendar [--date YYYY-MM-DD]` prints the day's window; it exits 3
+  on a non-trading day, so the daily scheduled session can stop cleanly.
 
 ### 3.4 Signals, playbooks and triggers (`strategy/`)
 

@@ -16,6 +16,8 @@ session:
   entry_cutoff: "12:15"
   window_end: "12:30"
   hard_flat_deadline: "12:35"
+  # Unscheduled NYSE closures not yet in the calendar, e.g. ["2026-01-09"].
+  extra_closures: []
 
 agent:
   check_in_minutes: 15

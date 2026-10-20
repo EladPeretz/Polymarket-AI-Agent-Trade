@@ -1,7 +1,7 @@
 """Typed configuration. Files hold no secrets; credentials come from the environment."""
 
 import re
-from datetime import time
+from datetime import date, time
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Self
@@ -50,6 +50,9 @@ class SessionConfig(_Model):
     entry_cutoff: time = time(12, 15)
     window_end: time = time(12, 30)
     hard_flat_deadline: time = time(12, 35)
+    # Unscheduled NYSE closures (e.g. a national day of mourning) not yet in the
+    # calendar module, as quoted "YYYY-MM-DD" strings.
+    extra_closures: tuple[date, ...] = ()
 
     @field_validator(
         "window_start", "entry_cutoff", "window_end", "hard_flat_deadline", mode="before"
