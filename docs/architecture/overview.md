@@ -91,11 +91,24 @@ known dev/CI environments.
   jumps are normal and do not signal a gap. The SDK reconnects silently, so
   staleness is judged by time: a channel that goes quiet for longer than its
   threshold is re-snapshotted via REST before the state is marked fresh.
+* Book and ticker frames arrive every 100 ms, so they are the required channels:
+  either one silent, or carrying a venue timestamp older than
+  `market.stale_after_ms` (2 s), marks the instrument stale. BBO and trades only
+  arrive on change and are never required. After a gap, and at startup, the
+  feed re-snapshots book, ticker and the missed trades via REST once the stream
+  is live again; only then is the instrument fresh. No frame at all for
+  `market.resubscribe_after_ms` closes and reopens the subscription.
 * Exposes a read-only `MarketSnapshot` (book top N, mark, index, last, funding
   rate, OI, recent trades, staleness flags).
 * **Staleness is first-class.** If any required input is older than its
   threshold, the snapshot is marked stale, and the risk engine blocks new entries
   until it recovers.
+* The **recorder** appends every stream event, REST re-snapshot and feed status
+  change (subscribed, stale, fresh, resubscribing, stopped) to
+  `data/recordings/<UTC date>/<SYMBOL>.jsonl`. Repeated book and ticker frames
+  are written once. Recordings stay local (ADR-0006); the simulator and
+  backtests replay them with `read_recording`. `perps-agent record --seconds N`
+  runs the feed and recorder on their own.
 
 ### 3.3 Session calendar (`calendar/`)
 

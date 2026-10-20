@@ -97,6 +97,32 @@ class AgentConfig(_Model):
     next_event_timeout_seconds: Annotated[int, Field(ge=10, le=540)] = 540
 
 
+class MarketDataConfig(_Model):
+    """Market data feed and recorder (overview §3.2).
+
+    Book and ticker frames arrive every 100 ms (measured 2026-10-20), so a quiet
+    gap of ``stale_after_ms`` means the feed is broken, not that the market is
+    calm. BBO and trades only arrive on change and are never required.
+    """
+
+    stale_after_ms: Annotated[int, Field(ge=200)] = 2_000
+    # No frame at all for this long: close and reopen the subscription.
+    resubscribe_after_ms: Annotated[int, Field(ge=1_000)] = 15_000
+    check_interval_ms: Annotated[int, Field(ge=10, le=5_000)] = 250
+    # Book levels per side in a snapshot. WebSocket book frames carry 20.
+    snapshot_depth: Annotated[int, Field(ge=1, le=20)] = 10
+    recent_trades_seconds: Annotated[int, Field(ge=1, le=3_600)] = 300
+    record: bool = True
+    # Raw recordings stay local (git-ignored); see ADR-0006.
+    recording_dir: str = "data/recordings"
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.resubscribe_after_ms <= self.stale_after_ms:
+            raise ValueError("resubscribe_after_ms must be greater than stale_after_ms")
+        return self
+
+
 class RiskConfig(_Model):
     """Risk rules (overview §3.7). ``None`` means not decided yet (capital-dependent).
 
@@ -155,6 +181,7 @@ class AppConfig(_Model):
     venue: VenueConfig = VenueConfig()
     session: SessionConfig = SessionConfig()
     agent: AgentConfig = AgentConfig()
+    market: MarketDataConfig = MarketDataConfig()
     risk: RiskConfig = RiskConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
