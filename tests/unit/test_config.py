@@ -12,7 +12,7 @@ from perps_agent.config import (
     readiness_problems,
     require_ready,
 )
-from perps_agent.config.models import SessionConfig
+from perps_agent.config.models import MarketDataConfig, SessionConfig
 from tests.conftest import COMPLETE_RISK, REPO_ROOT
 
 LIVE_ENV_CREDS = {
@@ -169,3 +169,11 @@ def test_secrets_never_appear_in_repr_or_dump():
         "proxy-secret-value",
         LIVE_ENV_CREDS["PERPS_PROXY_PRIVATE_KEY"],
     }
+
+
+def test_market_defaults_and_resubscribe_must_exceed_stale():
+    config = load_config(REPO_ROOT / "config" / "default.yaml")
+    assert config.market.stale_after_ms == 2_000
+    assert config.market.resubscribe_after_ms > config.market.stale_after_ms
+    with pytest.raises(ValidationError):
+        MarketDataConfig(stale_after_ms=5_000, resubscribe_after_ms=5_000)

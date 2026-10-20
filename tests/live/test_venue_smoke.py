@@ -15,7 +15,7 @@ import pytest
 from perps_agent.clock import utc_now
 from perps_agent.config.models import VenueConfig
 from perps_agent.venue import (
-    BboEvent,
+    BookEvent,
     InstrumentRegistry,
     StreamChannel,
     TickerEvent,
@@ -55,22 +55,25 @@ def test_rest_reads_without_credentials() -> None:
     assert funding
 
 
-def test_stream_bbo_and_ticker() -> None:
+def test_stream_book_and_ticker() -> None:
+    # Book and ticker frames arrive every 100 ms. BBO only arrives when the top of
+    # the book changes, which can take minutes in a quiet session, so it is not awaited.
     async def run():
         source = create_market_data(VenueConfig())
         try:
             instrument = next(i for i in await source.fetch_instruments() if i.symbol == SYMBOL)
             seen: set[type] = set()
             stream = await source.stream(
-                [instrument.instrument_id], [StreamChannel.BBO, StreamChannel.TICKER]
+                [instrument.instrument_id],
+                [StreamChannel.BBO, StreamChannel.BOOK, StreamChannel.TICKER],
             )
             async with stream, asyncio.timeout(30):
                 async for event in stream:
                     seen.add(type(event))
-                    if {BboEvent, TickerEvent} <= seen:
+                    if {BookEvent, TickerEvent} <= seen:
                         break
             return seen
         finally:
             await source.aclose()
 
-    assert {BboEvent, TickerEvent} <= asyncio.run(run())
+    assert {BookEvent, TickerEvent} <= asyncio.run(run())

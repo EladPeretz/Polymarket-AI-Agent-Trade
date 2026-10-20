@@ -37,6 +37,13 @@ python3 -m venv .venv
 .venv/bin/perps-agent config-check --strict   # fails unless ready to run
 ```
 
+Stream live market data for the enabled symbols and record it to
+`data/recordings/` (read-only, no credentials; needs WebSocket access):
+
+```bash
+.venv/bin/perps-agent record --seconds 60   # prints the final snapshots
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

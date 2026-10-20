@@ -29,3 +29,10 @@ def test_config_check_reports_invalid_config(tmp_path, capsys):
     path.write_text(yaml.safe_dump({"symbols": "NVDA-USD"}))
     assert main(["config-check", "--config", str(path)]) == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_record_reports_invalid_config(tmp_path, capsys):
+    bad = tmp_path / "default.yaml"
+    bad.write_text("symbols: nope\n")
+    assert main(["record", "--config", str(bad), "--seconds", "1"]) == 1
+    assert "error:" in capsys.readouterr().err

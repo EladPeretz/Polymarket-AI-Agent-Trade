@@ -21,6 +21,17 @@ agent:
   check_in_minutes: 15
   next_event_timeout_seconds: 540
 
+# Market data feed (docs/architecture/overview.md §3.2). Book and ticker frames
+# arrive every 100 ms; a longer silence marks the snapshot stale.
+market:
+  stale_after_ms: 2000
+  resubscribe_after_ms: 15000
+  check_interval_ms: 250
+  snapshot_depth: 10
+  recent_trades_seconds: 300
+  record: true
+  recording_dir: data/recordings   # git-ignored; raw recordings are not published
+
 # Risk rules (docs/architecture/overview.md §3.7). Capital-dependent values are
 # null until decided; the engine refuses to start while any are null.
 risk:
