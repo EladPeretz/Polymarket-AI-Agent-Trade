@@ -416,6 +416,21 @@ An independent supervisor task inside the engine, with no LLM dependency:
   their estimated probabilities**, the chosen plan and expected outcome, the risk
   verdict, and the actual outcome. Scenario records are for the learning loop
   only and are not shown in daily reports or alerts (ADR-0010).
+* Implementation (`journal/`, WP8): one append-only thread of entries per
+  decision, sharing a `decision_id`: `decision` (trigger, snapshot digest and
+  the features used, regime and setup tags, thesis, scenarios with
+  probabilities, expected R and the assumptions each depends on, the chosen
+  scenario, the `TradeIntent`, tool calls), `risk_verdict`, `order_linked` (the
+  ledger order and position it opened), `action_failed`, `outcome` (derived
+  from the ledger when the position closes: prices, PnL after costs, R
+  multiple, exit reason) and `review` (the scenario that played out and which
+  assumptions held). Entries are checked against the thread, so a review can
+  only judge scenarios and assumptions the decision weighed.
+  `Journal.assumption_checks` returns the reviewed occurrences of an assumption
+  (latest review per decision, optionally per setup or regime), the evidence
+  the learning loop counts before changing how a playbook is applied (owner
+  rule: at least 8 failures in the last 10). Stored as
+  `results/<date>/journal.jsonl`, with known secret values redacted.
 
 ### 3.12 Results store
 
