@@ -287,6 +287,34 @@ data (ADR-0005). The fill model is deliberately conservative:
 The same simulator runs backtests from historical data, with a reduced model
 (candles/trades instead of books).
 
+Implementation (`sim/`, WP5). `PaperSimulator` implements `OrderGateway` and
+`AccountReader` and is fed every market event; each call returns the order
+updates, fills, funding payments, TP/SL triggers and liquidations it caused.
+
+* **Latency** is `sim.latency_ms` (default 250 ms): an order fills against the
+  first book published at or after it reaches the venue, never the book it was
+  decided on. Liquidity it takes stays taken until the next book frame.
+* Market orders are bounded by the price band; unfilled IOC quantity expires, a
+  FOK fills in full or not at all, a GTC rests its remainder. Post-only orders
+  that would cross are rejected. A public trade's quantity is shared across our
+  resting orders, best price first.
+* Venue rules (`venue/rules.py`), the worst-case pre-trade margin check (§9 of
+  the venue research) and reduce-only capping are applied as on the venue.
+* Positions are isolated, at the instrument's max leverage unless set. Funding
+  settles at the ticker's `next_funding` with the last rate and mark before it.
+* Position TP/SL (one each per instrument) trigger on mark and close the whole
+  position with a market order, through the same latency, sweeping each new
+  book until flat.
+* Fee rates are `sim.taker_fee_rate` / `sim.maker_fee_rate` (tier 0 by default).
+  `sim.starting_collateral` is capital, so it is `null` until the owner sets it,
+  and paper and backtest modes refuse to start without it.
+* `sim.replay` replays a recording. The recorder skips repeated frames, so
+  between records the last book is taken to still hold while the feed was live,
+  and nothing is assumed while it was stale.
+* Not modelled yet: bracket TP/SL on entry (the execution layer sets the
+  position TP/SL after the fill), cross margin, order modification, and the
+  candle-based backtest model (WP13).
+
 ### 3.10 Guardian (`guardian/`)
 
 An independent supervisor task inside the engine, with no LLM dependency:

@@ -49,6 +49,14 @@ risk:
   liquidation_buffer_fraction: null # stop within this fraction of entry→liquidation distance
   max_snapshot_age_ms: 2000
 
+# Paper/backtest fill simulator (docs/architecture/overview.md §3.9). Fee rates
+# are tier 0 (venue research §8). Starting collateral is capital: null until set.
+sim:
+  latency_ms: 250
+  taker_fee_rate: 0.0004
+  maker_fee_rate: 0.000125
+  starting_collateral: null         # pUSD
+
 # Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
 live:
   enabled: false

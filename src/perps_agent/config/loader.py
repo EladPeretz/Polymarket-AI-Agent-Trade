@@ -71,6 +71,9 @@ def readiness_problems(
     env = os.environ if environ is None else environ
     problems = [f"risk.{name} is not set" for name in config.risk.unset_fields()]
 
+    if config.mode is not Mode.LIVE and config.sim.starting_collateral is None:
+        problems.append("sim.starting_collateral is not set")
+
     if config.mode is Mode.LIVE:
         if not config.live.enabled:
             problems.append("live.enabled is false")

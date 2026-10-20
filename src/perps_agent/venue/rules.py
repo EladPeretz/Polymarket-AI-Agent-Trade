@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from decimal import ROUND_DOWN, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 
-from perps_agent.venue.models import Instrument, OrderRequest, Side
+from perps_agent.venue.models import Instrument, OrderRequest, OrderStatus, Side
 
 # The venue accepts at most 5 significant figures for price and quantity.
 MAX_SIGNIFICANT_FIGURES = 5
@@ -24,6 +24,15 @@ class Violation(StrEnum):
     QUANTITY_SIGNIFICANT_FIGURES = "quantity_significant_figures"
     BELOW_MIN_NOTIONAL = "below_min_notional"
     ABOVE_MAX_NOTIONAL = "above_max_notional"
+
+
+# Violations the venue reports as an order status; any other one is a request error.
+STATUS_FOR_VIOLATION = {
+    Violation.INSTRUMENT_CLOSE_ONLY: OrderStatus.INSTRUMENT_CLOSE_ONLY,
+    Violation.INSTRUMENT_SETTLED: OrderStatus.INSTRUMENT_SETTLED,
+    Violation.BELOW_MIN_NOTIONAL: OrderStatus.BELOW_MIN_NOTIONAL,
+    Violation.PRICE_OUTSIDE_BAND: OrderStatus.PRICE_OUTSIDE_BOUNDS,
+}
 
 
 @dataclass(frozen=True, slots=True)
