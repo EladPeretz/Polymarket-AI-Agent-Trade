@@ -123,8 +123,10 @@ def test_a_trade_is_journaled_from_decision_to_outcome():
     assert outcome.decision_id == decision.decision_id
     assert outcome.direction is Direction.LONG and outcome.playbook == "orb@1"
     assert outcome.net_pnl == position.net_pnl
-    assert outcome.approved_risk == D("3.5")
-    assert outcome.r_multiple == position.net_pnl / D("3.5")
+    # The risk the approved order took at its stop, costs included (just under the
+    # 3.5 budget after rounding).
+    assert outcome.approved_risk == verdict.risk_amount
+    assert outcome.r_multiple == position.net_pnl / verdict.risk_amount
     assert outcome.average_entry == position.average_entry
     assert outcome.average_exit == D("200.48")  # the IOC filled at the bid
     assert outcome.exit_reason == "target reached early"
