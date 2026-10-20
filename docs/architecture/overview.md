@@ -259,6 +259,27 @@ Continuous checks: stale data halts entries; a position without a confirmed stop
 gets an immediate protective stop or is closed. The 12:30 close-out applies to
 runners with no exceptions.
 
+Implementation (`risk/`, WP6). `RiskEngine.evaluate(intent, instrument,
+snapshot, state, now)` returns a `RiskVerdict`: approved, resized or rejected,
+with every failed check listed at once, and the exact `OrderRequest` (fresh
+32-hex client order id) that execution may send. `evaluate_add` applies rule 10
+and `check_stop_change` rule 11. The engine refuses to construct while any risk
+value is `null`.
+
+* The budget is `per_trade_risk_fraction` of the lower of current and
+  start-of-day equity (× `l2_risk_fraction` for L2), times the intent's `size`.
+* A marketable entry is priced at the worst book level its size reaches, sized
+  over that longer distance, and sent as an IOC limited to that price. It is cut
+  to the depth the snapshot shows.
+* Leverage is the lowest of `max_leverage`, the venue tier cap for the position
+  notional, and the highest whole leverage that keeps the stop inside the
+  liquidation buffer. If even 1x fails the buffer, the intent is rejected.
+* The stop is rounded away from the entry onto the venue's price grid; a limit
+  entry is rounded passively.
+* `RiskState` (equity, available margin, start-of-day equity, open positions with
+  their approved risk, working entries, today's entry counts) is built by the
+  ledger (WP7). Adds count as entries toward `max_trades_per_day`.
+
 ### 3.8 Execution (`execution/`)
 
 * Entries: limit orders by default (optionally post-only), with an entry timeout
