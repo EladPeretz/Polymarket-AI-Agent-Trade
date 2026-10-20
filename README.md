@@ -9,8 +9,8 @@ override.
 | Phase | Goal | Status |
 | - | - | - |
 | 0 — Venue research | Read the venue docs, probe the live API, list blockers and gaps | **Done** — see [`docs/phase-0/`](docs/phase-0/) |
-| 1 — Architecture | System design, ADRs, go/no-go criteria for the merge decision | **In review** — see [`docs/architecture/`](docs/architecture/overview.md), [`docs/adr/`](docs/adr/README.md) |
-| 2 — Development | Exchange adapter, risk engine, agent framework, data recorder | — |
+| 1 — Architecture | System design, ADRs, go/no-go criteria for the merge decision | **Done** (`v0.1.0`) — see [`docs/architecture/`](docs/architecture/overview.md), [`docs/adr/`](docs/adr/README.md) |
+| 2 — Development | Exchange adapter, risk engine, agent framework, data recorder | **In progress** — work packages in [overview §8](docs/architecture/overview.md) |
 | 3 — Simulation testing | Backtests → paper trading on live feeds → small live capital | — |
 | Decision | Merge and continue, or fall back to the previous tagged version | — |
 
@@ -23,13 +23,23 @@ override.
 * [`scripts/phase0_connectivity_check.py`](scripts/phase0_connectivity_check.py):
   read-only connectivity check (never places orders or creates credentials).
 
-## Running the connectivity check
+## Development setup
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-cp .env.example .env   # optional: fill in for account checks
-set -a; . ./.env; set +a
+
+# checks (same as CI)
+.venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/mypy && .venv/bin/pytest
+
+# validate configuration (config/default.yaml + config/symbols/*.yaml)
+.venv/bin/perps-agent config-check            # warns about unset risk values
+.venv/bin/perps-agent config-check --strict   # fails unless ready to run
+```
+
+Read-only venue connectivity check (never places orders):
+
+```bash
 .venv/bin/python scripts/phase0_connectivity_check.py --symbol NVDA-USD
 ```
 

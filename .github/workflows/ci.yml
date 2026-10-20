@@ -19,6 +19,9 @@ jobs:
         run: ruff check .
       - name: Format
         run: ruff format --check .
+      - name: Type check
+        run: mypy
       - name: Tests
-        # Exit code 5 means "no tests collected"; allowed until Phase 2 adds tests.
-        run: pytest || [ $? -eq 5 ]
+        run: pytest
+      - name: Config check (repo defaults must load)
+        run: perps-agent config-check > /dev/null
