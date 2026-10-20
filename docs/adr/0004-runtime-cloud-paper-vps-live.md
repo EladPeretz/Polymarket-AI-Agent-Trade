@@ -1,6 +1,6 @@
 # ADR-0004: Paper trading in Claude Code cloud sessions; live trading on a self-hosted VPS
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

@@ -1,6 +1,6 @@
 # ADR-0003: Agent autonomy as a config-defined envelope
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

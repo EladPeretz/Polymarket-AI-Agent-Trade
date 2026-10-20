@@ -1,6 +1,6 @@
 # ADR-0009: Agent-managed positions: adding, exit plans, trailing stops and runners
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

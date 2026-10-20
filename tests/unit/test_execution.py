@@ -15,7 +15,7 @@ from perps_agent.ledger import (
     load_events,
 )
 from perps_agent.risk import Decision, Direction, RiskCheck
-from perps_agent.sim import Liquidation
+from perps_agent.sim import FundingPayment, Liquidation
 from perps_agent.venue import OrderStatus, RequestRejected, Side, TimeInForce
 from tests.unit.execution_factories import Desk
 from tests.unit.risk_factories import NOW, intent
@@ -48,7 +48,8 @@ def test_marketable_entry_fills_and_gets_its_stop_at_once():
     assert position.quantity == D("2.7362")  # 3.5 pUSD over 1.02 + 0.2591 costs
     assert position.average_entry == D("200.02")
     assert position.stop_price == D(199)
-    assert position.approved_risk == D("3.5")
+    # What the approved order risks at its stop, costs included (≤ the 3.5 budget).
+    assert position.approved_risk == D("2.7362") * D("1.279108")
     assert desk.sim.protection(19).stop_loss == D(199)
     assert desk.sim.position(19) is not None and desk.sim.position(19).leverage == D(10)
     _assert_books_agree(desk)
@@ -237,7 +238,7 @@ def test_a_refused_cancel_leaves_the_entry_working(caplog):
     assert "cancel failed" in caplog.text
 
 
-def test_a_liquidation_is_logged_as_an_error(caplog):
+def test_a_liquidation_blocks_new_entries(caplog):
     desk = Desk()
     _filled_long(desk)
     liquidation = Liquidation(
@@ -251,15 +252,55 @@ def test_a_liquidation_is_logged_as_an_error(caplog):
     with caplog.at_level(logging.ERROR):
         desk.feed([liquidation])
     assert "position liquidated" in caplog.text
+    assert desk.execution.entry_block == "liquidation on instrument 19"
 
 
-def test_a_venue_fill_the_ledger_cannot_place_is_an_error_and_a_mismatch():
+def test_entries_are_refused_while_blocked_until_cleared():
+    desk = Desk()
+    desk.market(0)
+    desk.execution._block_entries("test incident")
+    verdict = desk.evaluate(intent(entry="199.50", stop="198.50"))
+    with pytest.raises(ExecutionError, match="blocked: test incident"):
+        desk.run(desk.execution.enter(verdict))
+    assert desk.ledger.events == ()
+    desk.execution.clear_entry_block()
+    desk.run(desk.execution.enter(verdict))
+    assert desk.ledger.live_orders(SYMBOL)
+
+
+def test_a_venue_fill_the_ledger_cannot_place_blocks_entries_and_is_a_mismatch(caplog):
     desk = Desk()
     desk.market(0)
     desk.run(desk.sim.place_order(venue_order(quantity="1", price=None, coid="f" * 32)))
-    with pytest.raises(ExecutionError, match="unknown order"):
+    with caplog.at_level(logging.ERROR):
         desk.market(300)
+    assert "could not be booked" in caplog.text
+    assert desk.execution.entry_block is not None
+    assert "unknown order" in desk.execution.entry_block
     assert desk.run(desk.execution.mismatches()) == [f"{SYMBOL}: ledger flat, venue 1"]
+
+
+def test_one_bad_event_does_not_stop_the_batch():
+    desk = Desk()
+    desk.market(0)
+    desk.enter(intent(entry=None, stop="199"))
+    captured: list = []
+    desk.feed = captured.extend  # hold the fill back
+    desk.market(300)
+    del desk.feed
+    bad = FundingPayment(
+        instrument_id=999,
+        timestamp=desk.clock.now,
+        rate=D("0.0001"),
+        mark_price=D(200),
+        position_quantity=D(1),
+        amount=D(-1),
+    )
+    desk.feed([bad, *captured])
+    position = desk.ledger.open_position(SYMBOL)
+    assert position is not None and position.stop_price == D(199)  # still protected
+    assert desk.execution.entry_block is not None
+    assert desk.execution.entry_block.startswith("unbooked funding event")
 
 
 # --- Stops, targets and exits ---

@@ -1,6 +1,6 @@
 # ADR-0008: Short-window, regime-aware strategy evaluation with frequent iteration
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

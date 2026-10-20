@@ -1,6 +1,6 @@
 # ADR-0010: Scenario-based decisions and an agent-owned learning loop
 
-Status: Proposed · Date: 2026-10-20
+Status: Accepted · Date: 2026-10-20
 
 ## Context
 
