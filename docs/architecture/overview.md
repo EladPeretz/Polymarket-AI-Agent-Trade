@@ -19,7 +19,7 @@ recorded as ADRs in [`docs/adr/`](../adr/README.md). Phase gates are defined in
 | Trading window | 09:30–12:30 America/New_York, NYSE trading days. On half-days the window ends at the earlier of 12:30 and the session close. |
 | Flat by | 12:30, retrying until a hard cutoff (12:35) and alerting if anything is still open |
 | Direction | Long and short |
-| Positions | At most one per symbol; no adding to a position in v1 |
+| Positions | At most one position per symbol. The agent may add to a winning position and manage it actively (partial exits, trailing stops, runners) within risk rules (ADR-0009). |
 | Agent | Claude, running in Claude Code |
 | Agent inputs (v1) | Polymarket market data only. News and web search are later versions. |
 | Funding / withdrawals | Out of scope. Owner-managed; the bot never holds the owner key. |
@@ -132,7 +132,11 @@ uses a small tool surface served by the engine:
 | `get_portfolio()` | Positions, open orders, PnL, remaining risk budget |
 | `list_playbooks()` | Available playbooks, their current trigger state and parameter limits |
 | `propose_trade(intent)` | Submit a `TradeIntent`. Returns the risk verdict (approved / resized / rejected, with reasons). |
-| `adjust_protection(symbol, stop, target)` | Tighten a stop or move a target, within risk rules |
+| `adjust_protection(symbol, stop, target)` | Tighten a stop or move/remove a target, within risk rules |
+| `update_exit_plan(symbol, plan)` | Replace the position's exit plan (scale-outs, breakeven rule, trailing rule) at any time |
+| `set_trailing_stop(symbol, rule)` | Start or change the trailing rule the engine applies continuously |
+| `add_to_position(symbol, intent)` | Add size to a profitable position (same risk checks as a new trade, plus §3.7 rule 10) |
+| `reduce_position(symbol, fraction, reason)` | Partial exit |
 | `close_position(symbol, reason)` | Exit now |
 | `journal(note)` | Record reasoning that isn't tied to an action |
 
@@ -142,8 +146,14 @@ uses a small tool surface served by the engine:
 symbol, side (long|short), source (playbook:<id> | discretionary),
 entry (limit price | marketable), size (fraction of the per-trade risk budget, 0–1),
 stop_price (required), target_price (optional), time_stop (optional),
+exit_plan (optional: scale-out steps, breakeven trigger, trailing rule),
 thesis (text), confidence (0–1)
 ```
+
+Exit plans and trailing rules are chosen by the agent case by case; the
+engine provides a vocabulary of rule types (volatility-based distance,
+structure-based such as swing lows/highs or opening-range levels, VWAP-based,
+fixed distance, breakeven-after-R) that the agent combines and parameterizes.
 
 The agent sizes trades in **risk units, not quantity**. The risk engine converts
 a risk budget plus the stop distance into a quantity, so the agent cannot
@@ -205,9 +215,17 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
    for the day** (exits still allowed).
 9. Venue order validation: price/quantity precision, 5 significant figures, ±10%
    price band, min notional (§5).
+10. **Adding to a position** is allowed only while the position is in profit, and
+    only if the combined risk (all entries to the current stop) stays within the
+    position's approved risk budget. In practice the stop must already protect the
+    earlier entries.
+11. **Stops only tighten.** Any stop change (manual or trailing) that would move the
+    stop against the position, or remove it, is rejected. Runners are let run by
+    not taking profit, never by widening risk.
 
 Continuous checks: stale data halts entries; a position without a confirmed stop
-gets an immediate protective stop or is closed.
+gets an immediate protective stop or is closed. The 12:30 close-out applies to
+runners with no exceptions.
 
 ### 3.8 Execution (`execution/`)
 
@@ -219,6 +237,12 @@ gets an immediate protective stop or is closed.
   In live mode it is the exchange-side position TP/SL (mark-triggered, §10), so
   protection survives a crash of the agent, the engine or the session. In paper
   mode the simulator emulates the same mark-triggered behaviour.
+* **Engine-run trailing and exit plans:** the engine evaluates the active trailing
+  rule and exit plan on every relevant update, independently of when the agent
+  wakes. Stop moves are rate-limited and only tighten. On the venue a position
+  stop is replaced by cancel-then-create, which is not atomic, so during the
+  replacement the engine itself watches mark against the stop and exits if it is
+  crossed.
 * Client order IDs (32-hex) on every order for idempotency and reconciliation.
 * Live mode keeps the exchange **dead man's switch** armed while any order rests,
   re-arming every 20 s with a 60 s deadline, and disarms it on clean shutdown.
@@ -263,7 +287,10 @@ An independent supervisor task inside the engine, with no LLM dependency:
   minutes. Any mismatch blocks new entries and raises an incident (a go/no-go
   metric).
 * The decision journal records, for each agent event: the event, the snapshot
-  hash, the agent's tool calls and thesis, the risk verdict, and the outcome.
+  hash, the agent's tool calls and thesis, the **scenarios it considered with
+  their estimated probabilities**, the chosen plan and expected outcome, the risk
+  verdict, and the actual outcome. Scenario records are for the learning loop
+  only and are not shown in daily reports or alerts (ADR-0010).
 
 ### 3.12 Results store
 
@@ -273,16 +300,43 @@ Cloud sessions are temporary, so at the end of each session the run commits
 (gross, fees, funding, net), per-autonomy-level attribution, risk rejections,
 incidents, and agent latency.
 
+### 3.13 Decision process and learning loop (`agent/`, ADR-0010)
+
+* **Scenario reasoning:** before acting, the agent lays out plausible scenarios
+  for the current context and regime, estimates their probabilities and outcomes
+  for candidate plans, and chooses the most favourable risk-weighted idea, or
+  stands aside. It can call `simulate(symbol, horizon, plan)`: the engine
+  generates price paths calibrated to the current regime (recent volatility,
+  intraday profile, jump behaviour) and returns the outcome distribution for the
+  plan (stop/target/trail hit rates, expected R). Use of the tool is the agent's
+  choice.
+* **Daily review (after the close-out):** the agent compares outcomes with its
+  predictions (probability calibration, thesis accuracy, management vs a
+  fixed-exit baseline) and updates its **lessons notebook**, tagged by regime and
+  setup, with the evidence behind each lesson.
+* **Briefing:** each session starts with the lessons relevant to the day's
+  context and the agent's recent calibration statistics.
+* **Weekly review:** aggregates results, retires lessons the evidence no longer
+  supports, and **tunes playbooks**.
+* **Agent-owned strategy state:** lessons and playbook parameters/variants live
+  in an agent-state store versioned on the results branch, not in `main`. The
+  agent changes them itself within bounds that `main` defines. Every change
+  creates a new playbook version, must pass the automated Gate 1 screen before
+  use, is listed in the daily report, and can be reverted.
+* **Never learnable:** risk-engine rules and values, the trading window and
+  cutoffs, the guardian, the autonomy envelope, and code. These change only
+  through owner-reviewed PRs.
+
 ## 4. Daily lifecycle (paper mode)
 
 | Time (New York) | Step |
 | - | - |
 | 09:15 | Scheduled task starts a cloud session. The session installs deps, loads config, checks the calendar (exits on non-trading days) and starts the engine in the background. |
-| 09:15–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing. |
+| 09:15–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing including relevant lessons and its calibration stats. |
 | 09:30–12:15 | Agent loop: `next_event` → reason → act or pass. Engine runs triggers, risk, simulator and guardian continuously. |
 | 12:15 | Entry cutoff: only exits and protection adjustments allowed. |
 | 12:30–12:35 | Guardian closes everything. |
-| ~12:40 | Daily report generated, results committed to `paper-results`, session ends. |
+| ~12:40 | Daily review: the agent compares predictions with outcomes and updates lessons (and, weekly, playbooks). Daily report generated; results and agent state committed to `paper-results`; session ends. |
 
 Live mode (VPS) follows the same lifecycle, with the engine and a headless Claude
 Code session started by the server's scheduler.

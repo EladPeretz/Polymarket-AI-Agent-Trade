@@ -19,6 +19,9 @@ LLM-agent trading bot for Polymarket Perps stock perpetuals. Start with
 * Never commit secrets. Credentials come from environment variables only.
 * Risk engine and guardian rules are not to be weakened to make a trade or test pass.
 * Never route traffic to evade Polymarket's geographic restrictions.
+* The trading agent's learned state (lessons, playbook parameters) may change only
+  within the bounds defined in `main`. It must never alter risk rules, the trading
+  window, the guardian, the autonomy envelope or code (ADR-0010).
 
 ## Conventions
 
