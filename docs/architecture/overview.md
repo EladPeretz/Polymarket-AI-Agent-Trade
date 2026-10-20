@@ -15,7 +15,7 @@ recorded as ADRs in [`docs/adr/`](../adr/README.md). Phase gates are defined in
 | Topic | Decision |
 | - | - |
 | Venue | Polymarket Perps (international), equity perpetuals |
-| Universe | Configurable symbol list. Initial: `NVDA-USD` |
+| Universe | Configurable symbol list. Initial: `NVDA-USD`, `TSLA-USD`, `MSFT-USD`, `HOOD-USD`, `MSTR-USD`, `WTIOIL-USD` |
 | Trading window | 09:30–12:30 America/New_York, NYSE trading days. On half-days the window ends at the earlier of 12:30 and the session close. |
 | Flat by | 12:30, retrying until a hard cutoff (12:35) and alerting if anything is still open |
 | Direction | Long and short |
@@ -228,7 +228,7 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
    (noise floor); target, if present, on the correct side.
 4. Size from risk: `qty = risk_budget × size_fraction / |entry − stop|`, rounded
    down to venue precision; notional ≥ venue min ($10); ≤ max notional per position.
-5. Leverage ≤ configured cap (well below the venue's 10x); isolated margin.
+5. Leverage ≤ configured cap (at most the instrument's venue max); isolated margin.
 6. **Liquidation buffer:** the stop must sit well inside the estimated
    liquidation price (MM = 5% of notional on stock perps, §9), so the stop always
    triggers before liquidation could.
@@ -426,7 +426,7 @@ src/perps_agent/
   ledger/       event-sourced ledger, reconciler
   journal/      decision journal, daily report
   app/          entry points: run (paper|live), backtest, report
-config/         default.yaml, symbols/NVDA-USD.yaml (no secrets)
+config/         default.yaml, symbols/<SYMBOL>.yaml (no secrets)
 tests/          unit/, contract/, simulation/
 docs/           phase docs, architecture, ADRs
 scripts/        one-off tools (e.g. connectivity check)

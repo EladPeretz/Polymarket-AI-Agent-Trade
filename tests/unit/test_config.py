@@ -25,14 +25,26 @@ LIVE_ENV_CREDS = {
 def test_repository_default_config_loads():
     config = load_config(REPO_ROOT / "config" / "default.yaml")
     assert config.mode is Mode.PAPER
-    assert config.enabled_symbols == ("NVDA-USD",)
+    assert config.enabled_symbols == (
+        "NVDA-USD",
+        "TSLA-USD",
+        "MSFT-USD",
+        "HOOD-USD",
+        "MSTR-USD",
+        "WTIOIL-USD",
+    )
     assert config.session.window_start == time(9, 30)
     assert config.session.hard_flat_deadline == time(12, 35)
     assert config.live.enabled is False
 
 
-def test_repository_default_config_is_not_ready_until_risk_is_set():
+def test_repository_default_config_is_ready_for_paper_without_credentials():
     config = load_config(REPO_ROOT / "config" / "default.yaml")
+    assert readiness_problems(config, load_secrets({}), {}) == []
+
+
+def test_config_is_not_ready_until_risk_is_set(write_config):
+    config = load_config(write_config({"sim": COMPLETE_SIM}))
     problems = readiness_problems(config, load_secrets({}), {})
     assert "risk.per_trade_risk_fraction is not set" in problems
     with pytest.raises(ConfigError):
