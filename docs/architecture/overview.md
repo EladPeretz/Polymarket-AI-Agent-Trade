@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Status: proposed (Phase 1) · Last updated: 2026-10-19
+Status: proposed (Phase 1) · Last updated: 2026-10-20
 
 This document describes how the Polymarket Perps stock-trading agent is built.
 Venue facts referenced here (§ numbers) come from
@@ -72,15 +72,25 @@ known dev/CI environments.
   UTC datetimes).
 * Works around known issues, e.g. it filters tickers by `instrument_id` itself
   (§14).
-* Contract tests run against recorded API responses. A small set of live
-  read-only smoke tests run on demand.
+* Mark-price history and exchange status are not in the SDK; the adapter reads
+  them with plain HTTP GETs, still inside `venue/`.
+* Local venue-rule checks (precision, 5 significant figures, price band,
+  notional limits) are pure functions in `venue/rules.py`, reused by the risk
+  engine.
+* An in-memory fake exchange (`venue/fake.py`) implements the market-data and
+  order interfaces for tests. It never signs or sends anything.
+* Contract tests run against recorded API responses
+  (`scripts/record_venue_fixtures.py`). A small set of live read-only smoke
+  tests run on demand (`PERPS_AGENT_LIVE_TESTS=1 pytest tests/live`).
 
 ### 3.2 Market data and state (`market/`)
 
 * WebSocket subscriptions per symbol: `bbo`, `book`, `trades`, `tickers`; REST for
   instruments, funding history and candles.
-* Tracks the per-channel `sq`. On a gap or reconnect it re-snapshots via REST
-  before marking the state fresh.
+* `sq` is the engine-wide sequence, so it only orders frames within a channel;
+  jumps are normal and do not signal a gap. The SDK reconnects silently, so
+  staleness is judged by time: a channel that goes quiet for longer than its
+  threshold is re-snapshotted via REST before the state is marked fresh.
 * Exposes a read-only `MarketSnapshot` (book top N, mark, index, last, funding
   rate, OI, recent trades, staleness flags).
 * **Staleness is first-class.** If any required input is older than its
@@ -396,15 +406,21 @@ scripts/        one-off tools (e.g. connectivity check)
    check, tests), `CLAUDE.md` conventions.
 2. Venue adapter + domain models + contract tests.
 3. Market data feed + state store + recorder.
-4. Session calendar.
+4. Session calendar (no dependency on 2 or 3; can run in parallel).
 5. Simulator (fill model, fees, funding, mark-triggered stops).
 6. Risk engine + sizing.
 7. Execution + ledger (paper backend).
-8. Features, playbooks (first: opening-range breakout) and trigger detector.
-9. Agent bridge (tools, `TradeIntent`, prompts), including the MCP-vs-CLI transport spike.
-10. Guardian + daily report + results branch publishing.
-11. Daily scheduling in Claude Code cloud + a dry-run session.
-12. Backtest runner for playbooks.
+8. Trade journal: the append-only decision journal (§3.11) as its own package,
+   built after the ledger so decisions link to real fills, and before the agent
+   bridge, which writes to it. JSONL per session on `paper-results`.
+9. Features, playbooks (first: opening-range breakout) and trigger detector.
+10. Agent bridge (tools, `TradeIntent`, prompts), including the MCP-vs-CLI transport spike.
+11. Guardian + daily report + results branch publishing.
+12. Daily scheduling in Claude Code cloud + a dry-run session.
+13. Backtest runner for playbooks.
+14. Learning loop (§3.13): lessons notebook, daily and weekly review, briefing,
+    agent-state store with its bounds defined in `main`, and the `simulate` tool.
+    After the backtest runner, because playbook changes must pass Gate 1.
 
 Live gateway, reconciler and dead man's switch follow once paper trading meets
 its gate, before the VPS move.
