@@ -30,8 +30,9 @@ CandleInterval = Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 class MarketStream(Protocol):
     """An open market-data subscription. Iterate it for events; close it when done.
 
-    Reconnects are handled underneath, so a reconnect shows up only as a jump in
-    a channel's ``sequence``. The consumer re-snapshots on a gap (WP3).
+    The SDK reconnects underneath and does not report it. ``sequence`` cannot
+    reveal a reconnect either (see ``_StreamEvent``), so the consumer (WP3) must
+    detect staleness from time and re-snapshot via REST.
     """
 
     def __aiter__(self) -> AsyncIterator[MarketEvent]: ...

@@ -2,37 +2,37 @@
  {
   "instrument_id": 1,
   "symbol": "SP500-USD",
-  "index_price": "7684.5",
-  "mark_price": "7680.9",
-  "last_price": "7681.4",
-  "mid_price": "7679.2",
-  "open_interest": "3395.77635",
-  "funding_rate": "0.00000569",
-  "next_funding": 1792494000000,
-  "timestamp": 1792493651868
+  "index_price": "7667.3",
+  "mark_price": "7664.8",
+  "last_price": "7666.7",
+  "mid_price": "7664.8",
+  "open_interest": "3403.96534",
+  "funding_rate": "0.00000625",
+  "next_funding": 1792501200000,
+  "timestamp": 1792499214434
  },
  {
   "instrument_id": 6,
   "symbol": "BTC-USD",
-  "index_price": "81465",
-  "mark_price": "81436",
-  "last_price": "81475",
-  "mid_price": "81426",
-  "open_interest": "145.44929000000000000000000000",
+  "index_price": "81612",
+  "mark_price": "81592",
+  "last_price": "81608",
+  "mid_price": "81588",
+  "open_interest": "145.64100000000000000000000000",
   "funding_rate": "0.0000125",
-  "next_funding": 1792494000000,
-  "timestamp": 1792493651868
+  "next_funding": 1792501200000,
+  "timestamp": 1792499214434
  },
  {
   "instrument_id": 19,
   "symbol": "NVDA-USD",
-  "index_price": "216.28",
-  "mark_price": "216.31",
-  "last_price": "216.35",
-  "mid_price": "216.31",
-  "open_interest": "2884.4761",
+  "index_price": "215.28",
+  "mark_price": "215.36",
+  "last_price": "215.57",
+  "mid_price": "215.36",
+  "open_interest": "2899.7528",
   "funding_rate": "0.00000625",
-  "next_funding": 1792494000000,
-  "timestamp": 1792493651868
+  "next_funding": 1792501200000,
+  "timestamp": 1792499214434
  }
 ]

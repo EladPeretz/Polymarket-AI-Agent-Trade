@@ -1,23 +1,23 @@
 {
  "data": [
   {
-   "trade_id": 7874687074392896,
+   "trade_id": 596559785122272,
    "instrument_id": 19,
-   "side": "short",
-   "price": "216.35",
-   "quantity": "0.4074",
+   "side": "long",
+   "price": "215.57",
+   "quantity": "38.1978",
    "settlement": false,
-   "timestamp": 1792493041444,
+   "timestamp": 1792498685911,
    "hash": "0x"
   },
   {
-   "trade_id": 7874687074392895,
+   "trade_id": 6831789701357533,
    "instrument_id": 19,
-   "side": "short",
-   "price": "216.35",
-   "quantity": "0.0505",
+   "side": "long",
+   "price": "215.57",
+   "quantity": "8.1492",
    "settlement": false,
-   "timestamp": 1792493041444,
+   "timestamp": 1792498685910,
    "hash": "0x"
   }
  ],

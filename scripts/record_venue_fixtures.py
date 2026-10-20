@@ -6,7 +6,7 @@ never signs and never sends an order.
 REST responses are stored exactly as the server sent them, trimmed to the
 instruments named on the command line so the fixtures stay small. With
 ``--ws-seconds`` it also records raw WebSocket frames (the environment must
-allow WebSocket connections; the cloud development container does not).
+allow WebSocket connections; in a cloud session that needs Full network access).
 
 Usage:
     python scripts/record_venue_fixtures.py [--symbols NVDA-USD] [--ws-seconds 10]
@@ -93,10 +93,18 @@ async def record_ws(instrument_id: int, seconds: int) -> None:
             except TimeoutError:
                 break
             frames.append(json.loads(raw))
+    # Keep the first few frames per channel (plus acks) so the fixture stays small.
+    kept: list[Any] = []
+    per_channel: dict[str | None, int] = {}
+    for frame in frames:
+        channel = frame.get("ch") if isinstance(frame, dict) else None
+        per_channel[channel] = per_channel.get(channel, 0) + 1
+        if per_channel[channel] <= 3:
+            kept.append(frame)
     path = FIXTURES / "ws" / "frames.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(f) + "\n" for f in frames))
-    print(f"wrote {len(frames)} frames to {path.relative_to(FIXTURES.parents[2])}")
+    path.write_text("".join(json.dumps(f) + "\n" for f in kept))
+    print(f"wrote {len(kept)} of {len(frames)} frames to {path.relative_to(FIXTURES.parents[2])}")
 
 
 async def main(symbols: list[str], ws_seconds: int) -> None:

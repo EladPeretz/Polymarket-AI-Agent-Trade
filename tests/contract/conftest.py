@@ -32,8 +32,8 @@ def load_rest(name: str) -> Any:
     return json.loads((FIXTURES / "rest" / name).read_text())
 
 
-def load_frames() -> list[Any]:
-    lines = (FIXTURES / "ws" / "frames.jsonl").read_text().splitlines()
+def load_frames(name: str = "frames.jsonl") -> list[Any]:
+    lines = (FIXTURES / "ws" / name).read_text().splitlines()
     return [json.loads(line) for line in lines if line.strip()]
 
 

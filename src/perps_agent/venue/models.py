@@ -245,9 +245,11 @@ class StreamChannel(StrEnum):
 
 
 class _StreamEvent(_Model):
-    """Common envelope: the venue channel name and its per-channel sequence ``sq``.
+    """Common envelope: the venue channel name and the frame's ``sq``.
 
-    Gap detection on ``sequence`` is the consumer's job (market data feed, WP3).
+    ``sq`` is the exchange's engine sequence, shared across channels: it only
+    increases within a channel, by irregular steps (book and ticker frames can
+    carry the same value). A jump is not a gap. Seen live on 2026-10-20.
     """
 
     channel: str

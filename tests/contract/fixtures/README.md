@@ -5,12 +5,12 @@
   (see `rest/manifest.json` for when, the engine version and the SDK version).
   They are trimmed to NVDA-USD, BTC-USD and SP500-USD. SP500-USD (instrument 1)
   is the first ticker row, which the ticker regression test relies on.
-* `ws/frames.jsonl` holds WebSocket frames, one JSON object per line. The cloud
-  development container cannot open WebSocket connections, so these were
-  **written by hand from the AsyncAPI examples** (`/asyncapi-perps.json`) with
-  NVDA-USD values taken from the REST recording. Replace them with a real
-  recording (`--ws-seconds 10`) from a machine that can reach the WebSocket.
-  The last line is deliberately malformed (a BBO frame without the ask side).
+* `ws/frames.jsonl` holds real WebSocket frames for NVDA-USD (`--ws-seconds`),
+  the first three per channel plus the subscribe ack. No trade printed during
+  the recording.
+* `ws/synthetic.jsonl` holds hand-written frames for what the recording lacked:
+  a trades frame (shape from the AsyncAPI example), a ticker for another
+  instrument (to test filtering), and a deliberately malformed BBO frame.
 
 Re-record after an SDK upgrade or a venue API change, then run
 `pytest tests/contract`. Recording is read-only: public endpoints only, no

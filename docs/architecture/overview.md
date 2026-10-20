@@ -87,8 +87,10 @@ known dev/CI environments.
 
 * WebSocket subscriptions per symbol: `bbo`, `book`, `trades`, `tickers`; REST for
   instruments, funding history and candles.
-* Tracks the per-channel `sq`. On a gap or reconnect it re-snapshots via REST
-  before marking the state fresh.
+* `sq` is the engine-wide sequence, so it only orders frames within a channel;
+  jumps are normal and do not signal a gap. The SDK reconnects silently, so
+  staleness is judged by time: a channel that goes quiet for longer than its
+  threshold is re-snapshotted via REST before the state is marked fresh.
 * Exposes a read-only `MarketSnapshot` (book top N, mark, index, last, funding
   rate, OI, recent trades, staleness flags).
 * **Staleness is first-class.** If any required input is older than its
