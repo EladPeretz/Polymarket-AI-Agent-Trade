@@ -1,16 +1,35 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "polymarket-perps-bot"
-version = "0.0.1"
+version = "0.1.0"
 description = "LLM-agent trading bot for Polymarket stock perpetuals"
 requires-python = ">=3.12"
 dependencies = [
     # Perps SDK APIs are marked experimental; pin exactly and upgrade deliberately.
     "polymarket-client==0.13.0",
     "httpx>=0.27,<1",
+    "pydantic>=2.7,<3",
+    "pyyaml>=6,<7",
+    # IANA time zones on systems without them (e.g. minimal containers).
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.6", "pytest>=8"]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    "mypy>=1.11",
+    "types-PyYAML>=6",
+]
+
+[project.scripts]
+perps-agent = "perps_agent.app.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 100
@@ -18,3 +37,17 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["polymarket", "polymarket.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

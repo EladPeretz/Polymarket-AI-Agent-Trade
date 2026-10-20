@@ -1,0 +1,44 @@
+# Main configuration. No secrets here: credentials come from environment
+# variables (see .env.example). Times are in session.timezone.
+
+mode: paper
+
+symbols:
+  - NVDA-USD
+
+venue:
+  api_url: https://api.perpetuals.polymarket.com
+  ws_url: wss://ws.perpetuals.polymarket.com/v1/ws
+
+session:
+  timezone: America/New_York
+  window_start: "09:30"
+  entry_cutoff: "12:15"
+  window_end: "12:30"
+  hard_flat_deadline: "12:35"
+
+agent:
+  check_in_minutes: 15
+  next_event_timeout_seconds: 540
+
+# Risk rules (docs/architecture/overview.md §3.7). Capital-dependent values are
+# null until decided; the engine refuses to start while any are null.
+risk:
+  per_trade_risk_fraction: null     # fraction of equity risked per trade, e.g. 0.005
+  daily_loss_limit_fraction: null   # halt new entries at this daily loss, e.g. 0.02
+  max_leverage: null                # venue max for stock perps is 10x
+  max_position_notional: null       # pUSD
+  max_concurrent_positions: 1
+  max_trades_per_day: null
+  max_l2_trades_per_day: null
+  l2_risk_fraction: 0.5             # L2 trades use this share of the per-trade budget
+  min_stop_distance_bp: null
+  max_spread_bp: null
+  min_top_of_book_notional: null    # pUSD
+  liquidation_buffer_fraction: null # stop within this fraction of entry→liquidation distance
+  max_snapshot_age_ms: 2000
+
+# Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
+live:
+  enabled: false
+  jurisdiction_attestation: null

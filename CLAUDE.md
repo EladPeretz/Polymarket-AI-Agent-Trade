@@ -29,8 +29,11 @@ LLM-agent trading bot for Polymarket Perps stock perpetuals. Start with
 * Only `perps_agent.venue` may import the `polymarket` SDK (ADR-0001).
 * The SDK is pinned to an exact version in `pyproject.toml`; upgrade it only in a dedicated PR.
 * Never hard-code venue parameters. Read instruments, fees and limits from the API.
-* Lint/format with `ruff`; test with `pytest`. Run `ruff check . && ruff format --check . && pytest`
-  before committing.
+* Before committing run: `ruff check . && ruff format --check . && mypy && pytest`
+  (CI runs the same, plus `perps-agent config-check`).
+* Config lives in `config/` (YAML, no secrets). Session times must be quoted `"HH:MM"`
+  strings. Capital-dependent risk values stay `null` until the owner sets them; the
+  engine refuses to start while any are `null`.
 * Changes go through PRs; the owner reviews and merges. Keep PRs to one work package.
 
 ## Known venue/SDK issues
