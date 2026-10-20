@@ -13,7 +13,9 @@ at once. Rules, by the numbers of §3.7:
 2. Snapshot fresh and no older than ``max_snapshot_age_ms``; spread within
    ``max_spread_bp``; top-of-book notional on both sides ≥ ``min_top_of_book_notional``.
 3. Stop on the correct side and at least ``min_stop_distance_bp`` from entry;
-   target, if any, on the correct side; time stop inside the window.
+   target, if any, on the correct side and worth at least ``min_reward_risk``
+   times the risk (both after costs, at the final entry price); time stop
+   inside the window.
 4. ``qty = budget × size / loss per unit``, rounded down, where the loss per
    unit is ``|entry − stop|`` plus the entry fee and the stop's taker fee and
    ``stop_slippage_bp``; notional ≥ the venue minimum and ≤
@@ -88,6 +90,7 @@ class RiskCheck(StrEnum):
     STOP_DISTANCE = "stop_distance"
     STOP_WIDENED = "stop_widened"
     TARGET_SIDE = "target_side"
+    REWARD_RISK = "reward_risk"
     TIME_STOP = "time_stop"
     ADD_RISK = "add_risk"
     BOOK_DEPTH = "book_depth"
@@ -358,6 +361,18 @@ class RiskEngine:
             if quantity > depth:
                 quantity = depth
                 resize(RiskCheck.BOOK_DEPTH, f"cut to the {depth} shown up to {entry}")
+        if prices.target is not None:
+            # The target fires a market order too: the same exit costs as the stop.
+            risk = loss_per_unit(entry, stop, **costs)
+            reward = abs(prices.target - entry) - entry * costs["entry_fee_rate"]
+            reward -= prices.target * self._exit_cost_rate
+            if reward < config.min_reward_risk * risk:
+                reject(
+                    RiskCheck.REWARD_RISK,
+                    f"target {prices.target} is worth {reward / risk:.2f}R after costs, "
+                    f"minimum {config.min_reward_risk}R",
+                )
+                return rejected()
 
         assert config.max_position_notional is not None
         held_quantity = position.quantity if adding and position is not None else Decimal(0)

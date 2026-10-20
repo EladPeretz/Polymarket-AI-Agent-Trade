@@ -234,7 +234,10 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
    not `close_only`.
 2. Market snapshot fresh; spread ≤ max; top-of-book depth ≥ min.
 3. Stop present, on the correct side, and at least a minimum distance away
-   (noise floor); target, if present, on the correct side.
+   (noise floor); target, if present, on the correct side and worth at least
+   `min_reward_risk` (2R) after costs, measured from the final entry price.
+   A trade without a target is allowed (a runner managed by its stop). The rule
+   applies at entry; targets may still be moved afterwards.
 4. Size from risk: `qty = risk_budget × size_fraction / loss per unit`, rounded
    down to venue precision, where the loss per unit is `|entry − stop|` plus the
    entry fee and the stop's taker fee and slippage; notional ≥ venue min ($10);

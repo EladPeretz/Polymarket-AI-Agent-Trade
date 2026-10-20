@@ -38,6 +38,7 @@ RISK = RiskConfig(
     liquidation_buffer_fraction=D("0.5"),
     max_snapshot_age_ms=2000,
     stop_slippage_bp=D(5),
+    min_reward_risk=D(2),
 )
 # Tier 0, as config/default.yaml's sim section.
 FEES = FeeRates(taker=D("0.0004"), maker=D("0.000125"))

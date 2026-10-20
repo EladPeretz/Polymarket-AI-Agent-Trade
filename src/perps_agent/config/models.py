@@ -150,6 +150,9 @@ class RiskConfig(_Model):
     # Expected slippage of the market order a stop sends, beyond its trigger price.
     # Sizing counts it as a cost, with the fees.
     stop_slippage_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(5)
+    # A target, when set, must be worth at least this many times the risk to the
+    # stop, costs included on both sides. Trades without a target are allowed.
+    min_reward_risk: Annotated[Decimal, Field(ge=0, le=20)] = Decimal(2)
 
     def unset_fields(self) -> list[str]:
         return sorted(name for name, value in self if value is None)
