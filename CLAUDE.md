@@ -42,3 +42,7 @@ LLM-agent trading bot for Polymarket Perps stock perpetuals. Start with
   returns the wrong instrument. Filter tickers by `instrument_id` yourself.
 * Market session (regular/overnight/weekend) is not exposed by the API. Use the
   local calendar.
+* After an SDK upgrade or a venue API change, re-record the contract fixtures with
+  `scripts/record_venue_fixtures.py` and run `pytest tests/contract`. Live read-only
+  smoke tests: `PERPS_AGENT_LIVE_TESTS=1 pytest tests/live`. The cloud container
+  cannot open WebSockets, so stream checks need another machine.
