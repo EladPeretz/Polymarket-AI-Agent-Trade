@@ -4,8 +4,8 @@ Status: proposed (Phase 1) · Last updated: 2026-10-19
 
 Each phase ends with an explicit decision: **merge and continue**, or **fall back**
 to the previous tagged version. The criteria are fixed here, before results exist,
-so the decision is objective. Values marked *TBD* depend on capital and are set
-when the trading framework is built. They must be set before the gate that uses them.
+so the decision is objective. The capital-dependent values were set by the owner on
+2026-10-20.
 
 ## Gate 1 — Playbook screen (before a playbook version enters paper trading)
 
@@ -38,7 +38,7 @@ All of the following, measured on paper trading with the live data feed:
 | Duration | ≥ 20 trading days (playbook/parameter changes don't reset the count; changes to risk, execution or guardian code restart the safety criteria) |
 | Net PnL after fees and funding | > 0 |
 | Profit factor (gross wins ÷ gross losses) | > 1.2 |
-| Maximum drawdown | < *TBD* % of paper equity |
+| Maximum drawdown (peak to trough) | < 8% of paper equity |
 | Risk-rule violations (an order reached execution that should have been rejected) | **0** |
 | Unexplained ledger mismatches / unreconciled state | **0** |
 | Window close-outs completed by 12:35 | 100% of days |
@@ -49,11 +49,11 @@ rate, average win/loss, average agent latency per event, and LLM usage.
 
 ## Gate 3 — Live pilot → normal live operation
 
-Run on the VPS with small capital (*TBD*) for ≥ 10 trading days:
+Run on the VPS with small capital (about 500 pUSD) for ≥ 10 trading days:
 
 * all Gate 2 safety criteria hold (0 violations, 0 mismatches, 100% close-outs),
-* live fills and slippage within a *TBD* tolerance of the paper simulator's
-  model for comparable trades (validates the simulator),
+* live fills average within 3 bp of the paper simulator's model for comparable
+  orders (validates the simulator),
 * no venue-side incident (rejected orders from validation errors, auth
   failures, geo blocks).
 
