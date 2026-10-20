@@ -15,6 +15,9 @@ books every outcome in the ledger, and keeps each position protected.
 * **Stops only tighten**: every stop change goes through
   ``RiskEngine.check_stop_change``. Targets may move or be removed.
 * **Time stops** close the position when they pass.
+* **Incidents.** A venue report the ledger cannot book, or a liquidation, is
+  logged and blocks new entries until :meth:`ExecutionEngine.clear_entry_block`;
+  the rest of the batch is still booked and protected.
 
 Every order carries a fresh 32-hex client order id. Engine-run trailing rules
 and exit plans (ADR-0009) build on :meth:`update_protection` and
@@ -37,6 +40,7 @@ from perps_agent.ledger import (
     FillBooked,
     FundingBooked,
     Ledger,
+    LedgerError,
     LedgerOrder,
     LedgerPosition,
     OrderChanged,
@@ -98,6 +102,8 @@ class ExecutionEngine:
         self._marks: dict[str, Decimal] = {}
         # Symbol → why it is being closed, until it is flat.
         self._closing: dict[str, str] = {}
+        # Why new entries are blocked (an incident), or ``None``.
+        self._entry_block: str | None = None
 
     # --- Day and state ---
 
@@ -130,6 +136,15 @@ class ExecutionEngine:
     def closing(self) -> Mapping[str, str]:
         return dict(self._closing)
 
+    @property
+    def entry_block(self) -> str | None:
+        """Why new entries are refused after an incident, or ``None``."""
+        return self._entry_block
+
+    def clear_entry_block(self) -> None:
+        """Allow entries again once the incident has been looked at."""
+        self._entry_block = None
+
     # --- Entries ---
 
     async def enter(self, verdict: RiskVerdict) -> OrderState:
@@ -138,6 +153,8 @@ class ExecutionEngine:
         if not verdict.approved or order is None:
             raise ExecutionError(f"verdict for {verdict.intent.symbol} is {verdict.decision}")
         intent = verdict.intent
+        if self._entry_block is not None:
+            raise ExecutionError(f"entries are blocked: {self._entry_block}")
         age = self._now() - verdict.evaluated_at
         if age > self._risk.verdict_ttl:
             raise ExecutionError(
@@ -168,7 +185,8 @@ class ExecutionEngine:
             stop_price=verdict.stop_price,
             target_price=verdict.target_price,
             time_stop=intent.time_stop,
-            approved_risk=verdict.risk_budget,
+            # What the approved order risks, after any resize: adds stay within it.
+            approved_risk=verdict.risk_amount,
             leverage=verdict.leverage,
         )
 
@@ -247,29 +265,44 @@ class ExecutionEngine:
     # --- Venue reports ---
 
     async def on_events(self, events: Iterable[SimEvent]) -> None:
-        """Book order updates, fills and funding; protect what just filled."""
+        """Book order updates, fills and funding; protect what just filled.
+
+        An event that cannot be booked is an incident: it is logged, blocks new
+        entries, and does not stop the rest of the batch.
+        """
         to_protect: list[str] = []
         flattened: list[LedgerPosition] = []
         for event in events:
-            match event:
-                case ProtectionTriggered():
-                    self._on_trigger(event)
-                case OrderUpdate():
-                    self._on_order(event.order)
-                case FillEvent():
-                    position = self._on_fill(event)
-                    order = self.ledger.order(event.fill.client_order_id or "")
-                    if position.is_open and order is not None and order.sent.purpose.opens:
-                        to_protect.append(position.position_id)
-                    if not position.is_open:
-                        flattened.append(position)
-                case FundingPayment():
-                    self._on_funding(event)
-                case Liquidation():
-                    log.error(
-                        "position liquidated",
-                        extra={"instrument_id": event.instrument_id, "mark": str(event.mark_price)},
-                    )
+            try:
+                match event:
+                    case ProtectionTriggered():
+                        self._on_trigger(event)
+                    case OrderUpdate():
+                        self._on_order(event.order)
+                    case FillEvent():
+                        position = self._on_fill(event)
+                        order = self.ledger.order(event.fill.client_order_id or "")
+                        if position.is_open and order is not None and order.sent.purpose.opens:
+                            to_protect.append(position.position_id)
+                        if not position.is_open:
+                            flattened.append(position)
+                    case FundingPayment():
+                        self._on_funding(event)
+                    case Liquidation():
+                        log.error(
+                            "position liquidated",
+                            extra={
+                                "instrument_id": event.instrument_id,
+                                "mark": str(event.mark_price),
+                            },
+                        )
+                        self._block_entries(f"liquidation on instrument {event.instrument_id}")
+            except (ExecutionError, LedgerError, UnknownInstrument) as error:
+                log.error(
+                    "venue report could not be booked",
+                    extra={"event": event.type, "error": str(error)},
+                )
+                self._block_entries(f"unbooked {event.type} event: {error}")
         for position in flattened:
             self._closing.pop(position.symbol, None)
             await self._cancel(
@@ -324,6 +357,10 @@ class ExecutionEngine:
         return problems
 
     # --- Internals ---
+
+    def _block_entries(self, reason: str) -> None:
+        if self._entry_block is None:
+            self._entry_block = reason
 
     def _pending_risk(self) -> Decimal:
         """What the unfilled quantity of working entries and adds would lose at their stops."""

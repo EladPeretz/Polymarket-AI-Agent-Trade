@@ -1,6 +1,6 @@
 # ADR-0002: The LLM proposes, deterministic code disposes
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

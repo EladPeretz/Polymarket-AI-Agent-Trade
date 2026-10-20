@@ -1,6 +1,6 @@
 # ADR-0006: Paper results persisted to a `paper-results` git branch
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

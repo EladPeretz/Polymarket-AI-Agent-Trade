@@ -136,8 +136,9 @@ known dev/CI environments.
   *compressed* (narrow range, low volatility), *trend* vs *rotation* (range
   extension vs repeated VWAP crosses). Regime labels are features. The agent sees
   them, and every trade and backtest result is tagged with them (ADR-0008).
-* **Playbooks** are coded, parameterized trade setups (e.g. opening-range
-  breakout, VWAP reversion, gap fade). Each has a precise trigger condition,
+* **Playbooks** are coded, parameterized trade setups (the owner's six: VWAP
+  reversion, momentum scalp, mean reversion, liquidity sweep, trend following,
+  swing on an opening flush). Each has a precise trigger condition,
   default stop/target logic, a parameter schema, and the **regimes it is designed
   for** (a momentum playbook declares expansion/trend; it is not judged on
   compressed sessions). Playbooks are pure functions of features, so they can be
@@ -331,6 +332,11 @@ everything in the ledger.
   cancels the symbol's working entries. Time stops close on `tick`.
 * `update_protection` tightens the stop (checked by
   `RiskEngine.check_stop_change`) and moves or removes the target.
+* A venue report the ledger cannot book, or a liquidation, is logged and blocks
+  new entries (`entry_block`) until `clear_entry_block`; the rest of the batch is
+  still booked and protected. A position's approved risk is what its approved
+  order risks at the stop (`RiskVerdict.risk_amount`), so adds cannot restore
+  size the risk engine cut.
 * Venue reports use the simulator's event vocabulary; orders the venue sends
   itself (TP/SL closes, liquidations) are registered from their trigger or fill.
 * Not yet: engine-run trailing rules and exit plans (ADR-0009, with WP9/WP10),
@@ -543,7 +549,12 @@ scripts/        one-off tools (e.g. connectivity check)
 8. Trade journal: the append-only decision journal (§3.11) as its own package,
    built after the ledger so decisions link to real fills, and before the agent
    bridge, which writes to it. JSONL per session on `paper-results`.
-9. Features, playbooks (first: opening-range breakout) and trigger detector.
+9. Features, playbooks and trigger detector. The playbooks are the owner's six
+   (`decisions/owner-inputs.md`): VWAP reversion, momentum scalp, mean reversion,
+   liquidity sweep, trend following and swing (opening flush, long only). Features
+   include per-symbol volatility (15 and 60 minute ranges, expected move to 12:30),
+   and the risk engine gains a volatility stop floor (stop ≥ the recent 15-minute
+   range, `min_stop_distance_bp` as the absolute floor).
 10. Agent bridge (tools, `TradeIntent`, prompts), including the MCP-vs-CLI transport spike.
 11. Guardian + daily report + results branch publishing.
 12. Daily scheduling in Claude Code cloud + a dry-run session.

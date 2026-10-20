@@ -1,6 +1,6 @@
 # ADR-0001: Python, with the official SDK pinned behind our own adapter
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

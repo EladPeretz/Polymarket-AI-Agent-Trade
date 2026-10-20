@@ -1,6 +1,6 @@
 # ADR-0007: Engineering workflow
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 
