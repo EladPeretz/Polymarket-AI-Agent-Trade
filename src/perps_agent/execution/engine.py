@@ -2,7 +2,8 @@
 books every outcome in the ledger, and keeps each position protected.
 
 * **Entries** send exactly the order the risk engine approved (``RiskVerdict.order``),
-  after setting the approved leverage. A limit entry still working after
+  after setting the approved leverage, and only while the verdict is fresh
+  (``RiskEngine.verdict_ttl``). A limit entry still working after
   ``entry_timeout_seconds`` is cancelled.
 * **Protection.** As soon as an entry or add fills, the position TP/SL is set to
   the approved stop (and target), and confirmed in the ledger. If it cannot be
@@ -120,6 +121,7 @@ class ExecutionEngine:
             pending_entries=frozenset(
                 o.sent.symbol for o in ledger.live_orders(purposes=(OrderPurpose.ENTRY,))
             ),
+            pending_risk=self._pending_risk(),
             trades_today=ledger.entries_today,
             l2_trades_today=ledger.l2_entries_today,
         )
@@ -136,6 +138,11 @@ class ExecutionEngine:
         if not verdict.approved or order is None:
             raise ExecutionError(f"verdict for {verdict.intent.symbol} is {verdict.decision}")
         intent = verdict.intent
+        age = self._now() - verdict.evaluated_at
+        if age > self._risk.verdict_ttl:
+            raise ExecutionError(
+                f"verdict for {intent.symbol} is {age.total_seconds():.1f}s old; evaluate it again"
+            )
         instrument = self._instrument(intent.symbol)
         if intent.symbol in self._closing:
             raise ExecutionError(f"{intent.symbol} is being closed")
@@ -317,6 +324,21 @@ class ExecutionEngine:
         return problems
 
     # --- Internals ---
+
+    def _pending_risk(self) -> Decimal:
+        """What the unfilled quantity of working entries and adds would lose at their stops."""
+        total = Decimal(0)
+        for order in self.ledger.live_orders(purposes=_OPENS):
+            sent = order.sent
+            if sent.price is None or sent.stop_price is None:
+                continue
+            total += self._risk.order_risk(
+                sent.quantity - order.filled_quantity,
+                sent.price,
+                sent.stop_price,
+                post_only=sent.post_only,
+            )
+        return total
 
     async def _send(self, request: OrderRequest, **meta: Any) -> OrderState:
         self.ledger.record(

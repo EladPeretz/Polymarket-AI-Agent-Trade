@@ -9,9 +9,11 @@ from perps_agent.risk import (
     AutonomyLevel,
     Decision,
     Direction,
+    PositionRisk,
     RiskCheck,
     RiskVerdict,
     liquidation_price,
+    loss_per_unit,
 )
 from perps_agent.venue import Side, TimeInForce
 from tests.unit.risk_factories import (
@@ -49,16 +51,18 @@ def test_limit_long_is_sized_from_the_risk_budget():
     verdict = _evaluate()
     assert verdict.decision is Decision.APPROVED
     assert verdict.reasons == ()
-    # 500 × 0.7% = 3.5 pUSD at risk over a 1.00 stop distance.
+    # 500 × 0.7% = 3.5 pUSD at risk. Each unit loses the 1.00 stop distance, the
+    # 4 bp taker entry fee (0.08) and the stop's 4 bp fee + 5 bp slippage on 199
+    # (0.1791): 3.5 / 1.2591 = 2.7797.
     assert verdict.risk_budget == D("3.5")
     order = verdict.order
     assert order is not None
     assert order.side is Side.BUY
-    assert order.quantity == D("3.5")
+    assert order.quantity == D("2.7797")
     assert order.price == D(200)
     assert order.time_in_force is TimeInForce.GTC
     assert not order.reduce_only
-    assert verdict.risk_amount == D("3.5")
+    assert verdict.risk_amount == D("2.7797") * D("1.2591")
     assert verdict.leverage == 10
     assert verdict.stop_price == D(199)
 
@@ -66,15 +70,15 @@ def test_limit_long_is_sized_from_the_risk_budget():
 def test_size_is_a_fraction_of_the_budget_and_rounds_down():
     verdict = _evaluate(intent(size="0.33333"))
     assert verdict.order is not None
-    # 3.5 × 0.33333 = 1.1666655 → 4 decimals, rounded down.
-    assert verdict.order.quantity == D("1.1666")
+    # 3.5 × 0.33333 / 1.2591 = 0.92659 → 4 decimals, rounded down.
+    assert verdict.order.quantity == D("0.9265")
     assert verdict.risk_amount is not None and verdict.risk_amount <= verdict.risk_budget
 
 
 def test_l2_uses_the_reduced_budget():
     verdict = _evaluate(intent(level=AutonomyLevel.L2))
     assert verdict.risk_budget == D("1.75")
-    assert verdict.order is not None and verdict.order.quantity == D("1.75")
+    assert verdict.order is not None and verdict.order.quantity == D("1.3898")  # 1.75 / 1.2591
 
 
 def test_budget_uses_the_lower_of_current_and_day_start_equity():
@@ -89,7 +93,8 @@ def test_short_limit_entry():
     assert verdict.decision is Decision.APPROVED
     assert verdict.order is not None
     assert verdict.order.side is Side.SELL
-    assert verdict.order.quantity == D("3.5")
+    # 1.00 + 0.08 entry fee + 201 × 9 bp exit cost = 1.2609 per unit.
+    assert verdict.order.quantity == D("2.7757")
 
 
 def test_marketable_entry_is_an_ioc_limited_at_the_worst_level_it_reaches():
@@ -99,11 +104,12 @@ def test_marketable_entry_is_an_ioc_limited_at_the_worst_level_it_reaches():
     order = verdict.order
     assert order is not None
     assert order.time_in_force is TimeInForce.IOC
-    # 14 pUSD / 1.02 = 13.7 does not fit in the first level (10), so it is priced
-    # at 200.10 and re-sized over the longer distance: 14 / 1.10, to 5 figures.
+    # 14 pUSD / 1.2791 (1.02 + costs) = 10.9 does not fit in the first level (10),
+    # so it is priced at 200.10 and re-sized over the longer distance: 14 / 1.3591,
+    # to 5 figures.
     assert order.price == D("200.10")
     assert verdict.entry_price == D("200.10")
-    assert order.quantity == D("12.727")
+    assert order.quantity == D("10.300")
     assert verdict.risk_amount is not None and verdict.risk_amount <= D(14)
 
 
@@ -350,6 +356,69 @@ def test_daily_loss_limit_halts_entries():
     assert _checks(_evaluate(account=at_limit)) == {RiskCheck.DAILY_LOSS}
 
 
+def _tsla(quantity: str = "10", pnl: str = "0") -> PositionRisk:
+    """An open TSLA long 400 → stop 399: 1.00 + 399 × 9 bp exit cost per unit."""
+    return PositionRisk(
+        symbol="TSLA-USD",
+        direction=Direction.LONG,
+        quantity=D(quantity),
+        average_entry=D(400),
+        stop_price=D(399),
+        approved_risk=D("3.5"),
+        unrealized_pnl=D(pnl),
+    )
+
+
+def test_budget_is_cut_to_the_room_left_under_the_daily_loss_limit():
+    # −10 of the −15 limit: 5 left, more than the 3.43 budget.
+    assert _evaluate(account=state("490", day_start="500")).decision is Decision.APPROVED
+    # −12.5: 2.5 left, so the 3.4125 budget is cut to it.
+    verdict = _evaluate(account=state("487.5", day_start="500"))
+    assert verdict.decision is Decision.RESIZED
+    assert _checks(verdict) == {RiskCheck.DAILY_LOSS}
+    assert verdict.order is not None and verdict.order.quantity == D("1.9855")  # 2.5 / 1.2591
+    assert verdict.risk_amount is not None and verdict.risk_amount <= D("2.5")
+
+
+def test_open_positions_use_up_the_daily_loss_room():
+    # 10 TSLA risk 10 + 3.591 exit costs: 1.409 of the 15 is left.
+    verdict = _evaluate(account=state(positions=(_tsla(),)))
+    assert verdict.decision is Decision.RESIZED
+    assert _checks(verdict) == {RiskCheck.DAILY_LOSS}
+    assert verdict.order is not None and verdict.order.quantity == D("1.1190")
+    # 12 TSLA would lose 16.31 at its stop: no room at all.
+    rejected = _evaluate(account=state(positions=(_tsla("12"),)))
+    assert rejected.decision is Decision.REJECTED
+    assert _checks(rejected) == {RiskCheck.DAILY_LOSS}
+
+
+def test_an_open_loss_is_not_counted_twice():
+    # TSLA down 5: the day is at −5 and the stop is 5 closer, so the room is unchanged.
+    risk_engine = engine()
+    flat = state(positions=(_tsla(),))
+    down = state("495", day_start="500", positions=(_tsla(pnl="-5"),))
+    assert risk_engine.daily_loss_room(flat) == risk_engine.daily_loss_room(down) == D("1.409")
+
+
+def test_working_entries_use_up_the_daily_loss_room():
+    verdict = _evaluate(account=state(pending_risk=D(14)))
+    assert _checks(verdict) == {RiskCheck.DAILY_LOSS}
+    assert verdict.order is not None and verdict.order.quantity == D("0.7942")  # 1 / 1.2591
+
+
+def test_a_post_only_entry_is_sized_at_the_maker_fee():
+    # 1.00 + 200 × 1.25 bp + 199 × 9 bp = 1.2041 per unit.
+    verdict = _evaluate(intent(entry="200", post_only=True))
+    assert verdict.order is not None and verdict.order.quantity == D("2.9067")
+
+
+def test_loss_per_unit_counts_entry_and_exit_costs():
+    assert loss_per_unit(D(200), D(199)) == D(1)
+    assert loss_per_unit(
+        D(200), D(201), entry_fee_rate=D("0.0004"), exit_cost_rate=D("0.0009")
+    ) == D("1.2609")
+
+
 # --- Adding to a position (rule 10) ---
 
 
@@ -369,17 +438,18 @@ def test_add_gets_its_budget_while_the_position_has_room():
     verdict = _add()
     assert verdict.decision is Decision.APPROVED
     assert verdict.adding
-    assert verdict.order is not None and verdict.order.quantity == D("3.5")
+    assert verdict.order is not None and verdict.order.quantity == D("2.7797")
 
 
 def test_add_budget_is_cut_to_the_room_left():
-    # Held: 2 @ 198, stop 197.5 → 1 pUSD at risk of its 3 approved: 2 left.
+    # Held: 2 @ 198, stop 197.5 → 1 pUSD + 0.3555 exit costs at risk of its 3
+    # approved: 1.6445 left.
     held = position(entry="198", stop="197.5", approved_risk="3")
     verdict = _add(intent(entry="200", stop="197.5"), held=held)
     assert verdict.decision is Decision.RESIZED
     assert _checks(verdict) == {RiskCheck.ADD_RISK}
-    # 2 pUSD over a 2.50 distance → 0.8 units.
-    assert verdict.order is not None and verdict.order.quantity == D("0.8")
+    # 1.6445 pUSD over 2.50 + 0.08 + 0.17775 per unit → 0.5963 units.
+    assert verdict.order is not None and verdict.order.quantity == D("0.5963")
 
 
 def test_add_with_no_room_is_rejected():

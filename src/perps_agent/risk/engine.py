@@ -14,9 +14,11 @@ at once. Rules, by the numbers of §3.7:
    ``max_spread_bp``; top-of-book notional on both sides ≥ ``min_top_of_book_notional``.
 3. Stop on the correct side and at least ``min_stop_distance_bp`` from entry;
    target, if any, on the correct side; time stop inside the window.
-4. ``qty = budget × size / |entry − stop|``, rounded down; notional ≥ the
-   venue minimum and ≤ ``max_position_notional``. A marketable entry is priced
-   at the worst level its size reaches in the book, and that price is its limit.
+4. ``qty = budget × size / loss per unit``, rounded down, where the loss per
+   unit is ``|entry − stop|`` plus the entry fee and the stop's taker fee and
+   ``stop_slippage_bp``; notional ≥ the venue minimum and ≤
+   ``max_position_notional``. A marketable entry is priced at the worst level
+   its size reaches in the book, and that price is its limit.
 5. Leverage ≤ ``max_leverage`` and the venue tier cap; isolated margin; the
    initial margin must fit in available margin (else resized down).
 6. Liquidation buffer: ``|entry − stop| ≤ liquidation_buffer_fraction ×
@@ -24,8 +26,12 @@ at once. Rules, by the numbers of §3.7:
    ≥ 1 does, the intent is rejected.
 7. One position per symbol, ``max_concurrent_positions`` (working entries
    count), ``max_trades_per_day``, ``max_l2_trades_per_day``.
-8. Daily loss limit: once the day's PnL reaches ``−daily_loss_limit_fraction ×
-   day_start_equity``, no new entries for the day. Exits are never blocked here.
+8. Daily loss limit, a cap on the day's worst case: once the day's PnL reaches
+   ``−daily_loss_limit_fraction × day_start_equity``, no new entries for the
+   day. Before that, a new budget is cut to the room left under the limit after
+   what open positions and working entries would lose at their stops, so the
+   day cannot lose more than the limit if every stop fills at its price. Exits
+   are never blocked here.
 9. Venue order rules (``venue.rules.check_order``).
 10. Adding (:meth:`RiskEngine.evaluate_add`): the position must be in profit,
     and the whole position's risk to the stop must stay within its approved
@@ -50,7 +56,12 @@ from perps_agent.clock import to_utc
 from perps_agent.config.models import RiskConfig, SymbolConfig
 from perps_agent.market import MarketSnapshot
 from perps_agent.risk.intent import AutonomyLevel, TradeIntent
-from perps_agent.risk.sizing import max_leverage_for_stop, quantity_for_risk, sweep_price
+from perps_agent.risk.sizing import (
+    loss_per_unit,
+    max_leverage_for_stop,
+    quantity_for_risk,
+    sweep_price,
+)
 from perps_agent.risk.state import PositionRisk, RiskState
 from perps_agent.venue import Instrument, OrderRequest, Side, TimeInForce
 from perps_agent.venue.models import UtcDatetime
@@ -131,6 +142,14 @@ class RiskVerdict(_Model):
 
 
 @dataclass(frozen=True, slots=True)
+class FeeRates:
+    """The account's fee rates (venue research §8), from its tier."""
+
+    taker: Decimal
+    maker: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class _Prices:
     entry: Decimal
     stop: Decimal
@@ -143,6 +162,7 @@ class RiskEngine:
         config: RiskConfig,
         symbols: Sequence[SymbolConfig],
         calendar: TradingCalendar,
+        fees: FeeRates,
         *,
         new_order_id: Callable[[], str] = lambda: uuid.uuid4().hex,
     ) -> None:
@@ -152,6 +172,9 @@ class RiskEngine:
         self._config = config
         self._symbols = {s.symbol: s for s in symbols}
         self._calendar = calendar
+        self._fees = fees
+        # A stop fires a market order: taker fee plus slippage past the stop price.
+        self._exit_cost_rate = fees.taker + config.stop_slippage_bp / 10_000
         self._new_order_id = new_order_id
 
     # --- Entries ---
@@ -195,6 +218,32 @@ class RiskEngine:
         if level is AutonomyLevel.L2:
             base *= self._config.l2_risk_fraction
         return max(Decimal(0), base)
+
+    def daily_loss_room(self, state: RiskState) -> Decimal:
+        """How much more the day may lose (pUSD) under the daily loss limit (rule 8).
+
+        The limit, less the day's loss so far, less what open positions (from
+        their marks) and working entries would lose if their stops filled.
+        """
+        open_risk = sum(
+            (
+                p.loss_from_mark + p.quantity * p.stop_price * self._exit_cost_rate
+                for p in state.positions.values()
+            ),
+            Decimal(0),
+        )
+        return self._daily_loss_limit(state) + state.day_pnl - open_risk - state.pending_risk
+
+    def order_risk(
+        self, quantity: Decimal, price: Decimal, stop: Decimal, *, post_only: bool
+    ) -> Decimal:
+        """What ``quantity`` bought or sold at ``price`` loses if ``stop`` fires, costs included."""
+        return quantity * self._loss_per_unit(price, stop, post_only=post_only)
+
+    @property
+    def verdict_ttl(self) -> timedelta:
+        """How long an approved verdict stays valid; execution refuses older ones."""
+        return timedelta(milliseconds=self._config.max_snapshot_age_ms)
 
     # --- Protection ---
 
@@ -269,7 +318,11 @@ class RiskEngine:
         budget = requested
         if adding:
             assert position is not None
-            held = max(Decimal(0), position.quantity * (position.average_entry - stop) * sign)
+            held = max(
+                Decimal(0),
+                position.quantity
+                * ((position.average_entry - stop) * sign + stop * self._exit_cost_rate),
+            )
             room = position.approved_risk - held
             if room <= 0:
                 reject(
@@ -280,14 +333,28 @@ class RiskEngine:
             if room < budget:
                 budget = room
                 resize(RiskCheck.ADD_RISK, f"budget cut to the position's remaining {room}")
+        day_room = self.daily_loss_room(state)
+        if day_room <= 0:
+            reject(
+                RiskCheck.DAILY_LOSS,
+                f"open positions and entries already use the day's loss room ({day_room:.2f})",
+            )
+            return rejected()
+        if day_room < budget:
+            budget = day_room
+            resize(RiskCheck.DAILY_LOSS, f"budget cut to the {day_room:.2f} left for the day")
 
-        quantity = quantity_for_risk(budget, entry, stop)
+        costs = {
+            "entry_fee_rate": self._entry_fee_rate(post_only=intent.post_only),
+            "exit_cost_rate": self._exit_cost_rate,
+        }
+        quantity = quantity_for_risk(budget, entry, stop, **costs)
         if intent.is_marketable:
             levels = snapshot.asks if side is Side.BUY else snapshot.bids
             swept = sweep_price(levels, quantity)
             assert swept is not None  # both sides were checked above
             entry, depth = swept
-            quantity = quantity_for_risk(budget, entry, stop)
+            quantity = quantity_for_risk(budget, entry, stop, **costs)
             if quantity > depth:
                 quantity = depth
                 resize(RiskCheck.BOOK_DEPTH, f"cut to the {depth} shown up to {entry}")
@@ -372,7 +439,7 @@ class RiskEngine:
             stop_price=stop,
             target_price=prices.target,
             risk_budget=requested,
-            risk_amount=quantity * abs(entry - stop),
+            risk_amount=self.order_risk(quantity, entry, stop, post_only=intent.post_only),
         )
 
     def _check_permissions(
@@ -507,6 +574,18 @@ class RiskEngine:
                 )
                 ok = False
         return _Prices(entry, stop, target) if ok else None
+
+    def _entry_fee_rate(self, *, post_only: bool) -> Decimal:
+        # Only a post-only entry is sure to pay the maker rate.
+        return self._fees.maker if post_only else self._fees.taker
+
+    def _loss_per_unit(self, entry: Decimal, stop: Decimal, *, post_only: bool) -> Decimal:
+        return loss_per_unit(
+            entry,
+            stop,
+            entry_fee_rate=self._entry_fee_rate(post_only=post_only),
+            exit_cost_rate=self._exit_cost_rate,
+        )
 
     def _daily_loss_limit(self, state: RiskState) -> Decimal:
         assert self._config.daily_loss_limit_fraction is not None

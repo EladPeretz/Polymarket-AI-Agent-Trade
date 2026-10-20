@@ -1,5 +1,9 @@
 """Sizing and liquidation arithmetic (overview §3.7 rules 4–6). Pure functions.
 
+A stopped-out trade loses the price distance to the stop plus its costs: the
+entry fee, and the taker fee and slippage of the market order the stop sends.
+Sizing divides the budget by that whole loss, so a stop-out costs the budget.
+
 Positions are isolated with ``margin = notional / leverage`` and maintenance
 margin ``notional × mmr`` (venue research §9), the model ``sim.account`` uses.
 Solving ``margin + uPnL = MM`` for the mark gives the liquidation price:
@@ -42,9 +46,30 @@ def max_leverage_for_stop(
     return int((1 / floor).to_integral_value(rounding=ROUND_FLOOR))
 
 
-def quantity_for_risk(budget: Decimal, entry: Decimal, stop: Decimal) -> Decimal:
-    """Unrounded quantity that loses ``budget`` if the stop fills at its price."""
-    return budget / abs(entry - stop)
+def loss_per_unit(
+    entry: Decimal,
+    stop: Decimal,
+    *,
+    entry_fee_rate: Decimal = Decimal(0),
+    exit_cost_rate: Decimal = Decimal(0),
+) -> Decimal:
+    """What one unit loses if the stop fires: ``|entry − stop|``, the entry fee, and
+    the exit's costs (taker fee plus slippage, as a rate of the stop price)."""
+    return abs(entry - stop) + entry * entry_fee_rate + stop * exit_cost_rate
+
+
+def quantity_for_risk(
+    budget: Decimal,
+    entry: Decimal,
+    stop: Decimal,
+    *,
+    entry_fee_rate: Decimal = Decimal(0),
+    exit_cost_rate: Decimal = Decimal(0),
+) -> Decimal:
+    """Unrounded quantity that loses ``budget``, costs included, if the stop fires."""
+    return budget / loss_per_unit(
+        entry, stop, entry_fee_rate=entry_fee_rate, exit_cost_rate=exit_cost_rate
+    )
 
 
 def sweep_price(levels: Sequence[BookLevel], quantity: Decimal) -> tuple[Decimal, Decimal] | None:

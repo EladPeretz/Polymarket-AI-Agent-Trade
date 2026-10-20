@@ -235,16 +235,21 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
 2. Market snapshot fresh; spread ≤ max; top-of-book depth ≥ min.
 3. Stop present, on the correct side, and at least a minimum distance away
    (noise floor); target, if present, on the correct side.
-4. Size from risk: `qty = risk_budget × size_fraction / |entry − stop|`, rounded
-   down to venue precision; notional ≥ venue min ($10); ≤ max notional per position.
+4. Size from risk: `qty = risk_budget × size_fraction / loss per unit`, rounded
+   down to venue precision, where the loss per unit is `|entry − stop|` plus the
+   entry fee and the stop's taker fee and slippage; notional ≥ venue min ($10);
+   ≤ max notional per position.
 5. Leverage ≤ configured cap (at most the instrument's venue max); isolated margin.
 6. **Liquidation buffer:** the stop must sit well inside the estimated
    liquidation price (MM = 5% of notional on stock perps, §9), so the stop always
    triggers before liquidation could.
 7. One position per symbol; max concurrent positions; max trades per day; max
    L2 trades per day.
-8. Daily loss limit: when realized + unrealized PnL hits it, **halt new entries
-   for the day** (exits still allowed).
+8. Daily loss limit, a **hard cap on the day's worst case**: when realized +
+   unrealized PnL hits it, halt new entries for the day (exits still allowed).
+   Before that, each new budget is cut to the room left under the limit after
+   what open positions and working entries would lose at their stops, costs
+   included, so the day stays within the limit if every stop fills.
 9. Venue order validation: price/quantity precision, 5 significant figures, ±10%
    price band, min notional (§5).
 10. **Adding to a position** is allowed only while the position is in profit, and
@@ -267,7 +272,12 @@ and `check_stop_change` rule 11. The engine refuses to construct while any risk
 value is `null`.
 
 * The budget is `per_trade_risk_fraction` of the lower of current and
-  start-of-day equity (× `l2_risk_fraction` for L2), times the intent's `size`.
+  start-of-day equity (× `l2_risk_fraction` for L2), times the intent's `size`,
+  and at most `daily_loss_room` (rule 8).
+* Costs are part of the risk: the entry fee (maker only for post-only entries,
+  taker otherwise), and the stop's taker fee plus `stop_slippage_bp`. Fee rates
+  come from the account tier (`FeeRates`), so a stop-out loses the budget, not
+  the budget plus costs.
 * A marketable entry is priced at the worst book level its size reaches, sized
   over that longer distance, and sent as an IOC limited to that price. It is cut
   to the depth the snapshot shows.
@@ -278,7 +288,8 @@ value is `null`.
   entry is rounded passively.
 * `RiskState` (equity, available margin, start-of-day equity, open positions with
   their approved risk, working entries, today's entry counts) is built by the
-  ledger (WP7). Adds count as entries toward `max_trades_per_day`.
+  ledger (WP7), including `pending_risk`, what working entries would lose at
+  their stops. Adds count as entries toward `max_trades_per_day`.
 
 ### 3.8 Execution (`execution/`)
 
@@ -305,7 +316,8 @@ Implementation (`execution/`, WP7, paper backend). `ExecutionEngine` drives an
 everything in the ledger.
 
 * `enter(verdict)` sends exactly the order the risk engine approved, after
-  setting its leverage. A limit entry still working after
+  setting its leverage. A verdict older than `risk.max_snapshot_age_ms` is
+  refused, so the agent re-proposes against fresh data. A limit entry still working after
   `execution.entry_timeout_seconds` is cancelled by `tick`.
 * As soon as an entry or add fills, the position TP/SL is set to the approved
   stop and target and confirmed in the ledger. If that fails, the position is

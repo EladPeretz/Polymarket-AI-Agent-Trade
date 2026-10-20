@@ -54,7 +54,8 @@ risk:
   max_spread_bp: 6
   min_top_of_book_notional: 2000    # pUSD
   liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
-  max_snapshot_age_ms: 2000
+  max_snapshot_age_ms: 2000         # also how long an approved verdict may wait to be sent
+  stop_slippage_bp: 5               # sizing counts this beyond the stop, plus fees
 
 # Paper/backtest fill simulator (docs/architecture/overview.md §3.9). Fee rates
 # are tier 0 (venue research §8). Starting collateral is capital, set by the owner.
