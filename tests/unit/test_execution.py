@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
@@ -14,9 +15,11 @@ from perps_agent.ledger import (
     load_events,
 )
 from perps_agent.risk import Decision, Direction, RiskCheck
+from perps_agent.sim import Liquidation
 from perps_agent.venue import OrderStatus, RequestRejected, Side, TimeInForce
 from tests.unit.execution_factories import Desk
 from tests.unit.risk_factories import NOW, intent
+from tests.unit.venue_factories import order as venue_order
 
 D = Decimal
 SYMBOL = "NVDA-USD"
@@ -42,7 +45,7 @@ def test_marketable_entry_fills_and_gets_its_stop_at_once():
     position = desk.ledger.open_position(SYMBOL)
     assert position is not None
     assert position.direction is Direction.LONG
-    assert position.quantity == D("3.4313")  # 3.5 pUSD over 1.02
+    assert position.quantity == D("2.7362")  # 3.5 pUSD over 1.02 + 0.2591 costs
     assert position.average_entry == D("200.02")
     assert position.stop_price == D(199)
     assert position.approved_risk == D("3.5")
@@ -139,6 +142,33 @@ def test_second_entry_on_the_same_symbol_is_refused():
         desk.run(desk.execution.enter(second))
 
 
+def test_a_stale_verdict_is_refused():
+    desk = Desk()
+    desk.market(0)
+    verdict = desk.evaluate(intent(entry="199.50", stop="198.50"))
+    desk.clock.now = NOW + timedelta(milliseconds=2_001)  # max_snapshot_age_ms is 2000
+    with pytest.raises(ExecutionError, match="old"):
+        desk.run(desk.execution.enter(verdict))
+    assert desk.ledger.events == ()
+    assert desk.sim.open_orders() == ()
+
+
+def test_working_entries_report_their_risk():
+    desk = Desk()
+    desk.market(0)
+    verdict = desk.enter(intent(entry="199.50", stop="198.50"))
+    assert verdict.order is not None
+    state = desk.run(desk.execution.risk_state())
+    expected = desk.risk.order_risk(
+        verdict.order.quantity, D("199.50"), D("198.50"), post_only=False
+    )
+    assert state.pending_risk == expected
+    assert D("3.49") < expected <= D("3.5")
+    desk.market(300)  # the order reaches the venue
+    desk.trade(1_000, "199.40")  # fills: nothing left working
+    assert desk.run(desk.execution.risk_state()).pending_risk == 0
+
+
 def test_a_venue_refusal_is_recorded_and_raised():
     desk = Desk(collateral="500")
     desk.market(0)
@@ -165,6 +195,71 @@ def test_a_position_that_cannot_be_protected_is_closed():
     assert desk.ledger.open_position(SYMBOL) is None
     assert desk.execution.closing == {}
     _assert_books_agree(desk)
+
+
+def test_a_position_without_a_confirmed_stop_is_closed_on_tick():
+    desk = Desk()
+    _filled_long(desk)
+    position = desk.ledger.open_position(SYMBOL)
+    assert position is not None
+    desk.ledger.record(
+        ProtectionChanged(
+            at=desk.clock.now,
+            position_id=position.position_id,
+            symbol=SYMBOL,
+            stop_price=None,
+            target_price=None,
+            reason="stop lost",
+        )
+    )
+    desk.tick()
+    assert desk.execution.closing == {SYMBOL: "no confirmed stop"}
+    desk.market(600)
+    assert desk.ledger.open_position(SYMBOL) is None
+    _assert_books_agree(desk)
+
+
+class _NoCancel(SimBackend):
+    async def cancel_order(self, client_order_id):
+        raise RequestRejected("cancel unavailable", status=400)
+
+
+def test_a_refused_cancel_leaves_the_entry_working(caplog):
+    desk = Desk(entry_timeout_seconds=60)
+    desk.execution._backend = _NoCancel(desk.sim)
+    desk.market(0)
+    verdict = desk.enter(intent(entry="199.50", stop="198.50"))
+    desk.market(60_000)
+    with caplog.at_level(logging.WARNING):
+        desk.tick()
+    assert verdict.order is not None
+    assert desk.ledger.order(verdict.order.client_order_id).is_live
+    assert "cancel failed" in caplog.text
+
+
+def test_a_liquidation_is_logged_as_an_error(caplog):
+    desk = Desk()
+    _filled_long(desk)
+    liquidation = Liquidation(
+        instrument_id=19,
+        timestamp=desk.clock.now,
+        mark_price=D(181),
+        position_quantity=D("2.7362"),
+        margin_equity=D(1),
+        maintenance_margin=D(27),
+    )
+    with caplog.at_level(logging.ERROR):
+        desk.feed([liquidation])
+    assert "position liquidated" in caplog.text
+
+
+def test_a_venue_fill_the_ledger_cannot_place_is_an_error_and_a_mismatch():
+    desk = Desk()
+    desk.market(0)
+    desk.run(desk.sim.place_order(venue_order(quantity="1", price=None, coid="f" * 32)))
+    with pytest.raises(ExecutionError, match="unknown order"):
+        desk.market(300)
+    assert desk.run(desk.execution.mismatches()) == [f"{SYMBOL}: ledger flat, venue 1"]
 
 
 # --- Stops, targets and exits ---
@@ -230,7 +325,7 @@ def test_reduce_position_takes_part_off():
     desk.market(600)
     position = desk.ledger.open_position(SYMBOL)
     assert position is not None
-    assert position.quantity == D("3.4313") - D("1.7156")
+    assert position.quantity == D("2.7362") - D("1.3681")
     assert position.realized_pnl < 0  # sold at the bid
     _assert_books_agree(desk)
 

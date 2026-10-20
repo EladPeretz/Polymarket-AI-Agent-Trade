@@ -10,6 +10,7 @@ from perps_agent.market import MarketSnapshot
 from perps_agent.risk import (
     AutonomyLevel,
     Direction,
+    FeeRates,
     PositionRisk,
     RiskEngine,
     RiskState,
@@ -36,7 +37,10 @@ RISK = RiskConfig(
     min_top_of_book_notional=D(2000),
     liquidation_buffer_fraction=D("0.5"),
     max_snapshot_age_ms=2000,
+    stop_slippage_bp=D(5),
 )
+# Tier 0, as config/default.yaml's sim section.
+FEES = FeeRates(taker=D("0.0004"), maker=D("0.000125"))
 
 
 class OrderIds:
@@ -53,6 +57,7 @@ def engine(risk: RiskConfig = RISK, symbols: tuple[SymbolConfig, ...] | None = N
         risk,
         symbols or (SymbolConfig(symbol="NVDA-USD"),),
         TradingCalendar(SessionConfig()),
+        FEES,
         new_order_id=OrderIds(),
     )
 

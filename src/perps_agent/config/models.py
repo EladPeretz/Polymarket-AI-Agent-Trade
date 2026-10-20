@@ -147,6 +147,9 @@ class RiskConfig(_Model):
     # Stop must be at most this fraction of the distance from entry to liquidation.
     liquidation_buffer_fraction: Fraction | None = None
     max_snapshot_age_ms: Annotated[int, Field(ge=1)] = 2_000
+    # Expected slippage of the market order a stop sends, beyond its trigger price.
+    # Sizing counts it as a cost, with the fees.
+    stop_slippage_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(5)
 
     def unset_fields(self) -> list[str]:
         return sorted(name for name, value in self if value is None)

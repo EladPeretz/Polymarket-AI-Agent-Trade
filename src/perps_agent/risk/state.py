@@ -26,6 +26,12 @@ class PositionRisk:
         loss = self.quantity * (self.average_entry - self.stop_price) * self.direction.sign
         return max(Decimal(0), loss)
 
+    @property
+    def loss_from_mark(self) -> Decimal:
+        """What equity loses from here if the stop fills at its price (before exit costs)."""
+        loss = self.quantity * (self.average_entry - self.stop_price) * self.direction.sign
+        return max(Decimal(0), loss + self.unrealized_pnl)
+
 
 @dataclass(frozen=True, slots=True)
 class RiskState:
@@ -38,6 +44,8 @@ class RiskState:
     positions: Mapping[str, PositionRisk] = field(default_factory=dict)
     # Symbols with an entry order still working (they count as positions).
     pending_entries: frozenset[str] = frozenset()
+    # What the working entries' unfilled quantity would lose at their stops, costs included.
+    pending_risk: Decimal = Decimal(0)
     # Entries (new positions and adds) sent today, and how many of them were L2.
     trades_today: int = 0
     l2_trades_today: int = 0
