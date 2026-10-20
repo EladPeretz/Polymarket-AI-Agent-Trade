@@ -8,7 +8,7 @@ from perps_agent.config.loader import (
     readiness_problems,
     require_ready,
 )
-from perps_agent.config.models import AppConfig, Mode, Secrets
+from perps_agent.config.models import AppConfig, Mode, Secrets, SessionConfig
 
 __all__ = [
     "DEFAULT_CONFIG_PATH",
@@ -16,6 +16,7 @@ __all__ = [
     "ConfigError",
     "Mode",
     "Secrets",
+    "SessionConfig",
     "load_config",
     "load_secrets",
     "readiness_problems",

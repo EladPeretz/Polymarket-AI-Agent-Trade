@@ -44,6 +44,13 @@ Stream live market data for the enabled symbols and record it to
 .venv/bin/perps-agent record --seconds 60   # prints the final snapshots
 ```
 
+Print the trading window for a date from the local NYSE calendar (exits 3 on
+non-trading days):
+
+```bash
+.venv/bin/perps-agent calendar --date 2026-11-27   # early close: window capped at 13:00
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

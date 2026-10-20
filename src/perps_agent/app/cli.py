@@ -6,9 +6,12 @@ import json
 import logging
 import sys
 from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 
 from perps_agent import __version__
+from perps_agent.calendar import CalendarError, TradingCalendar
+from perps_agent.clock import utc_now
 from perps_agent.config import (
     DEFAULT_CONFIG_PATH,
     AppConfig,
@@ -42,11 +45,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     record.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     record.add_argument("--seconds", type=float, default=60.0, help="how long to run")
 
+    calendar = commands.add_parser(
+        "calendar",
+        help="print the trading window for a date (exit 3 on non-trading days)",
+    )
+    calendar.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    calendar.add_argument(
+        "--date",
+        type=date.fromisoformat,
+        help="exchange date, YYYY-MM-DD (default: today in New York)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "config-check":
         return _config_check(args.config, args.mode, strict=args.strict)
     if args.command == "record":
         return _record(args.config, args.seconds)
+    if args.command == "calendar":
+        return _calendar(args.config, args.date)
     return 2  # unreachable: subcommand is required
 
 
@@ -114,6 +130,43 @@ async def _run_feed(config: AppConfig, seconds: float) -> list[MarketSnapshot]:
         return snapshots
     finally:
         await source.aclose()
+
+
+# Exit code for a non-trading day, distinct from errors (1) so a scheduled
+# session can skip the day without treating it as a failure.
+EXIT_NOT_TRADING_DAY = 3
+
+
+def _calendar(path: Path, day: date | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    calendar = TradingCalendar(config.session)
+    if day is None:
+        day = utc_now().astimezone(config.session.zone).date()
+    try:
+        window = calendar.trading_window(day)
+        reason = calendar.exchange.closure_reason(day)
+    except CalendarError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    report: dict[str, object] = {"date": day.isoformat(), "trading_day": reason is None}
+    if reason is not None:
+        report["closed"] = reason
+    if window is not None:
+        report.update(
+            early_close=window.market.early_close,
+            market_open=window.market.open.isoformat(),
+            market_close=window.market.close.isoformat(),
+            window_start=window.start.isoformat(),
+            entry_cutoff=window.entry_cutoff.isoformat(),
+            window_end=window.end.isoformat(),
+            hard_flat_deadline=window.hard_flat_deadline.isoformat(),
+        )
+    print(json.dumps(report, indent=2))
+    return 0 if window is not None else EXIT_NOT_TRADING_DAY
 
 
 if __name__ == "__main__":
