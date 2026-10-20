@@ -152,6 +152,25 @@ class RiskConfig(_Model):
         return sorted(name for name, value in self if value is None)
 
 
+class SimConfig(_Model):
+    """Paper/backtest fill simulator (overview §3.9, ADR-0005).
+
+    Fee rates are the account's tier rates; with no account in paper mode they
+    default to tier 0 (venue research §8). ``starting_collateral`` is capital,
+    so it stays ``None`` until the owner sets it.
+    """
+
+    # An order reaches the simulated venue this long after it is sent, and
+    # fills against the first book published at or after that moment.
+    latency_ms: Annotated[int, Field(ge=0, le=5_000)] = 250
+    taker_fee_rate: Annotated[Decimal, Field(ge=0, lt=Decimal("0.01"))] = Decimal("0.0004")
+    # Negative at the top tiers (a rebate).
+    maker_fee_rate: Annotated[Decimal, Field(gt=Decimal("-0.01"), lt=Decimal("0.01"))] = Decimal(
+        "0.000125"
+    )
+    starting_collateral: PositiveDecimal | None = None
+
+
 class LiveConfig(_Model):
     """Live trading gate (ADR-0004). Off unless explicitly enabled and attested."""
 
@@ -186,6 +205,7 @@ class AppConfig(_Model):
     agent: AgentConfig = AgentConfig()
     market: MarketDataConfig = MarketDataConfig()
     risk: RiskConfig = RiskConfig()
+    sim: SimConfig = SimConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
 

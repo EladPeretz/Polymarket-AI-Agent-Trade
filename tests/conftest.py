@@ -18,6 +18,8 @@ COMPLETE_RISK = {
     "liquidation_buffer_fraction": 0.5,
 }
 
+COMPLETE_SIM = {"starting_collateral": 10000}
+
 
 @pytest.fixture
 def write_config(tmp_path: Path):

@@ -1,0 +1,8 @@
+symbol: HOOD-USD
+enabled: true
+
+# Autonomy levels the agent may use on this symbol (ADR-0003).
+autonomy:
+  L0: true
+  L1: true
+  L2: true

@@ -3,7 +3,7 @@
 It never signs or sends anything. Tests set its market state directly and push
 stream events into it. Orders are checked with the same venue rules as the real
 adapter and rest until cancelled or filled by the test; matching and fill
-modelling belong to the simulator (WP5).
+modelling live in ``perps_agent.sim``.
 """
 
 import asyncio
@@ -38,14 +38,7 @@ from perps_agent.venue.models import (
     Trade,
     TradesEvent,
 )
-from perps_agent.venue.rules import Violation, check_order
-
-_STATUS_FOR_VIOLATION = {
-    Violation.INSTRUMENT_CLOSE_ONLY: OrderStatus.INSTRUMENT_CLOSE_ONLY,
-    Violation.INSTRUMENT_SETTLED: OrderStatus.INSTRUMENT_SETTLED,
-    Violation.BELOW_MIN_NOTIONAL: OrderStatus.BELOW_MIN_NOTIONAL,
-    Violation.PRICE_OUTSIDE_BAND: OrderStatus.PRICE_OUTSIDE_BOUNDS,
-}
+from perps_agent.venue.rules import STATUS_FOR_VIOLATION, check_order
 
 
 def _channel_of(event: MarketEvent) -> StreamChannel:
@@ -227,7 +220,7 @@ class FakeExchange:
             status = OrderStatus.MARK_PRICE_UNAVAILABLE
         else:
             for violation in check_order(instrument, request, ticker.mark_price):
-                mapped = _STATUS_FOR_VIOLATION.get(violation.rule)
+                mapped = STATUS_FOR_VIOLATION.get(violation.rule)
                 if mapped is None:
                     raise RequestRejected(violation.detail, status=400, code=violation.rule)
                 status = mapped
