@@ -300,6 +300,27 @@ value is `null`.
 * Live mode keeps the exchange **dead man's switch** armed while any order rests,
   re-arming every 20 s with a 60 s deadline, and disarms it on clean shutdown.
 
+Implementation (`execution/`, WP7, paper backend). `ExecutionEngine` drives an
+`ExecutionBackend` (`SimBackend` over the simulator in paper mode) and books
+everything in the ledger.
+
+* `enter(verdict)` sends exactly the order the risk engine approved, after
+  setting its leverage. A limit entry still working after
+  `execution.entry_timeout_seconds` is cancelled by `tick`.
+* As soon as an entry or add fills, the position TP/SL is set to the approved
+  stop and target and confirmed in the ledger. If that fails, the position is
+  closed; `tick` also closes any position without a confirmed stop.
+* `close_position`, `reduce_position` and `close_all` send reduce-only IOC
+  orders limited `execution.exit_slippage_bp` through the mark. A close that
+  does not fill completely is re-sent on each `tick` until flat, and closing
+  cancels the symbol's working entries. Time stops close on `tick`.
+* `update_protection` tightens the stop (checked by
+  `RiskEngine.check_stop_change`) and moves or removes the target.
+* Venue reports use the simulator's event vocabulary; orders the venue sends
+  itself (TP/SL closes, liquidations) are registered from their trigger or fill.
+* Not yet: engine-run trailing rules and exit plans (ADR-0009, with WP9/WP10),
+  the non-atomic stop replacement watch and the dead man's switch (live only).
+
 ### 3.9 Paper simulator (`sim/`)
 
 There is no Perps testnet, so paper trading uses our own fill model fed by live
@@ -363,6 +384,14 @@ An independent supervisor task inside the engine, with no LLM dependency:
 
 * Event-sourced ledger: every order, fill, funding payment and fee is recorded as
   an event. Positions and PnL are derived from it.
+* Implementation (`ledger/`, WP7): `Ledger.record` assigns a sequence number,
+  applies the event and hands it to a sink (`JsonlLedgerSink` writes one JSON
+  line per event); `Ledger.from_events` rebuilds the same state from the log.
+  Events: `day_started`, `order_sent` (with purpose, position id and, for
+  entries, the approved stop, target, risk and autonomy level), `order_failed`,
+  `order_changed`, `fill`, `funding` and `protection`. The accounting matches the
+  simulator's, and tests check the two agree. `ExecutionEngine.mismatches()`
+  compares ledger and venue positions, the seed of the live reconciler.
 * Live mode: the reconciler compares the ledger against exchange state
   (portfolio, open orders, fills) at startup, after every reconnect, and every few
   minutes. Any mismatch blocks new entries and raises an incident (a go/no-go

@@ -171,6 +171,16 @@ class SimConfig(_Model):
     starting_collateral: PositiveDecimal | None = None
 
 
+class ExecutionConfig(_Model):
+    """Order handling (overview §3.8). Not capital-dependent, so it has defaults."""
+
+    # A limit entry still working after this long is cancelled.
+    entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 120
+    # Exits are reduce-only IOC orders limited this far through the mark, so a
+    # thin book cannot fill them at any price.
+    exit_slippage_bp: Annotated[Decimal, Field(gt=0, le=500)] = Decimal(50)
+
+
 class LiveConfig(_Model):
     """Live trading gate (ADR-0004). Off unless explicitly enabled and attested."""
 
@@ -206,6 +216,7 @@ class AppConfig(_Model):
     market: MarketDataConfig = MarketDataConfig()
     risk: RiskConfig = RiskConfig()
     sim: SimConfig = SimConfig()
+    execution: ExecutionConfig = ExecutionConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
 
