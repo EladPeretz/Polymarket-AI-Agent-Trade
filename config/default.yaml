@@ -5,6 +5,11 @@ mode: paper
 
 symbols:
   - NVDA-USD
+  - TSLA-USD
+  - MSFT-USD
+  - HOOD-USD
+  - MSTR-USD
+  - WTIOIL-USD
 
 venue:
   api_url: https://api.perpetuals.polymarket.com
@@ -33,29 +38,29 @@ market:
   recording_dir: data/recordings   # git-ignored; raw recordings are not published
 
 # Risk rules (docs/architecture/overview.md §3.7). Capital-dependent values are
-# null until decided; the engine refuses to start while any are null.
+# set by the owner; the engine refuses to start while any are null.
 risk:
-  per_trade_risk_fraction: null     # fraction of equity risked per trade, e.g. 0.005
-  daily_loss_limit_fraction: null   # halt new entries at this daily loss, e.g. 0.02
-  max_leverage: null                # venue max for stock perps is 10x
-  max_position_notional: null       # pUSD
-  max_concurrent_positions: 1
-  max_trades_per_day: null
-  max_l2_trades_per_day: null
+  per_trade_risk_fraction: 0.007    # max fraction of equity risked per trade; the agent sizes 0-1 of it
+  daily_loss_limit_fraction: 0.03   # halt new entries at this daily loss
+  max_leverage: 10                  # venue max for stock perps is 10x
+  max_position_notional: 5000       # pUSD
+  max_concurrent_positions: 3
+  max_trades_per_day: 12
+  max_l2_trades_per_day: 4
   l2_risk_fraction: 0.5             # L2 trades use this share of the per-trade budget
-  min_stop_distance_bp: null
-  max_spread_bp: null
-  min_top_of_book_notional: null    # pUSD
-  liquidation_buffer_fraction: null # stop within this fraction of entry→liquidation distance
+  min_stop_distance_bp: 20
+  max_spread_bp: 6
+  min_top_of_book_notional: 2000    # pUSD
+  liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
   max_snapshot_age_ms: 2000
 
 # Paper/backtest fill simulator (docs/architecture/overview.md §3.9). Fee rates
-# are tier 0 (venue research §8). Starting collateral is capital: null until set.
+# are tier 0 (venue research §8). Starting collateral is capital, set by the owner.
 sim:
   latency_ms: 250
   taker_fee_rate: 0.0004
   maker_fee_rate: 0.000125
-  starting_collateral: null         # pUSD
+  starting_collateral: 500          # pUSD
 
 # Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
 live:
