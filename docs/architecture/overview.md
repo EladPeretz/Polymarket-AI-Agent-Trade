@@ -287,7 +287,10 @@ An independent supervisor task inside the engine, with no LLM dependency:
   minutes. Any mismatch blocks new entries and raises an incident (a go/no-go
   metric).
 * The decision journal records, for each agent event: the event, the snapshot
-  hash, the agent's tool calls and thesis, the risk verdict, and the outcome.
+  hash, the agent's tool calls and thesis, the **scenarios it considered with
+  their estimated probabilities**, the chosen plan and expected outcome, the risk
+  verdict, and the actual outcome. Scenario records are for the learning loop
+  only and are not shown in daily reports or alerts (ADR-0010).
 
 ### 3.12 Results store
 
@@ -297,16 +300,43 @@ Cloud sessions are temporary, so at the end of each session the run commits
 (gross, fees, funding, net), per-autonomy-level attribution, risk rejections,
 incidents, and agent latency.
 
+### 3.13 Decision process and learning loop (`agent/`, ADR-0010)
+
+* **Scenario reasoning:** before acting, the agent lays out plausible scenarios
+  for the current context and regime, estimates their probabilities and outcomes
+  for candidate plans, and chooses the most favourable risk-weighted idea, or
+  stands aside. It can call `simulate(symbol, horizon, plan)`: the engine
+  generates price paths calibrated to the current regime (recent volatility,
+  intraday profile, jump behaviour) and returns the outcome distribution for the
+  plan (stop/target/trail hit rates, expected R). Use of the tool is the agent's
+  choice.
+* **Daily review (after the close-out):** the agent compares outcomes with its
+  predictions (probability calibration, thesis accuracy, management vs a
+  fixed-exit baseline) and updates its **lessons notebook**, tagged by regime and
+  setup, with the evidence behind each lesson.
+* **Briefing:** each session starts with the lessons relevant to the day's
+  context and the agent's recent calibration statistics.
+* **Weekly review:** aggregates results, retires lessons the evidence no longer
+  supports, and **tunes playbooks**.
+* **Agent-owned strategy state:** lessons and playbook parameters/variants live
+  in an agent-state store versioned on the results branch, not in `main`. The
+  agent changes them itself within bounds that `main` defines. Every change
+  creates a new playbook version, must pass the automated Gate 1 screen before
+  use, is listed in the daily report, and can be reverted.
+* **Never learnable:** risk-engine rules and values, the trading window and
+  cutoffs, the guardian, the autonomy envelope, and code. These change only
+  through owner-reviewed PRs.
+
 ## 4. Daily lifecycle (paper mode)
 
 | Time (New York) | Step |
 | - | - |
 | 09:15 | Scheduled task starts a cloud session. The session installs deps, loads config, checks the calendar (exits on non-trading days) and starts the engine in the background. |
-| 09:15–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing. |
+| 09:15–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing including relevant lessons and its calibration stats. |
 | 09:30–12:15 | Agent loop: `next_event` → reason → act or pass. Engine runs triggers, risk, simulator and guardian continuously. |
 | 12:15 | Entry cutoff: only exits and protection adjustments allowed. |
 | 12:30–12:35 | Guardian closes everything. |
-| ~12:40 | Daily report generated, results committed to `paper-results`, session ends. |
+| ~12:40 | Daily review: the agent compares predictions with outcomes and updates lessons (and, weekly, playbooks). Daily report generated; results and agent state committed to `paper-results`; session ends. |
 
 Live mode (VPS) follows the same lifecycle, with the engine and a headless Claude
 Code session started by the server's scheduler.
