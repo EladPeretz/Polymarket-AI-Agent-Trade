@@ -213,6 +213,13 @@ class TriggersConfig(_Model):
     large_move_seconds: Annotated[int, Field(ge=5, le=900)] = 60
     large_move_sigma: Annotated[Decimal, Field(gt=0, le=20)] = Decimal(3)
     large_move_min_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(15)
+    # Without a 1-minute volatility yet, the threshold is at least this share of
+    # the 15-minute range.
+    large_move_range_fraction: Annotated[Decimal, Field(ge=0, le=2)] = Decimal("0.5")
+    # After a large move, the symbol's next ones wait this long, unless price
+    # has gone this many thresholds beyond where the last one fired.
+    large_move_cooldown_seconds: Annotated[int, Field(ge=0, le=1_800)] = 300
+    large_move_escalation: Annotated[Decimal, Field(ge=1, le=10)] = Decimal(2)
     # Position events: the stop is this close (share of the entry-to-stop
     # distance left), the target this far along, or the time stop this near.
     approaching_stop_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.25")

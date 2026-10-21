@@ -63,6 +63,9 @@ triggers:
   large_move_seconds: 60
   large_move_sigma: 3               # × 1-minute volatility scaled to large_move_seconds
   large_move_min_bp: 15             # and at least this many bp
+  large_move_range_fraction: 0.5    # no 1-minute volatility yet: at least this × the 15m range
+  large_move_cooldown_seconds: 300  # a symbol's next large moves wait this long ...
+  large_move_escalation: 2          # ... unless price went this many thresholds further
   approaching_stop_fraction: 0.25   # share of the entry-to-stop distance left
   approaching_target_fraction: 0.8  # share of the way to the target
   time_stop_warning_minutes: 2
