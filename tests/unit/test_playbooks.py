@@ -178,22 +178,33 @@ def test_mean_reversion_fades_a_failed_breakout_against_the_trend_with_caution()
 # --- Liquidity sweep ---
 
 
-def _sweep(sweep_volume: str = "40", reclaim: str = "199.6"):
+def _sweep(
+    sweep_volume: str = "40",
+    reclaim: str = "199.6",
+    held: int = 5,
+    hold: tuple[str, ...] | None = None,
+    slow: int = 0,
+):
+    """Holds above 199.55, sweeps to 198.85, snaps back, then holds for ``held`` minutes."""
     base = path(OPEN, ["199.6", "199.8", "200"] * 7, first_open="199.7")
     sweep = path(
         OPEN + minutes(21), ["199.5", "198.9"], first_open="199.7", volumes=["10", sweep_volume]
     )
-    back = path(OPEN + minutes(23), [reclaim], first_open="198.9")
-    return base + sweep + back
+    # ``slow`` extra bars stuck below the level before the reclaim.
+    stuck = path(OPEN + minutes(23), ["198.95"] * slow, first_open="198.9", wick="0.02")
+    back = path(OPEN + minutes(23 + slow), [reclaim], first_open="198.95")
+    after = path(OPEN + minutes(24 + slow), list(hold or ("199.6",) * held), first_open=reclaim)
+    return base + sweep + stuck + back + after
 
 
-def test_liquidity_sweep_buys_the_reclaim_of_a_swept_low():
+def test_liquidity_sweep_buys_a_quick_reclaim_that_holds():
     snap = features(_sweep(), prior=history(10, low="199.2"))
     setup = LiquiditySweep().evaluate(snap, CONTEXT)
     assert setup is not None
     assert setup.direction is Direction.LONG
     assert setup.conviction is Conviction.HIGH
     assert _r(setup) == D("2.5")
+    assert "held 5 min" in setup.reasons[0]
     _assert_stop_clears_the_floor(snap, setup)
 
 
@@ -204,6 +215,30 @@ def test_liquidity_sweep_conviction_and_reclaim():
     assert normal is not None and normal.conviction is Conviction.NORMAL
     no_reclaim = features(_sweep(reclaim="199.0"), prior=history(10, low="199.2"))
     assert LiquiditySweep().evaluate(no_reclaim, CONTEXT) is None
+
+
+def test_liquidity_sweep_waits_for_the_5_minute_hold():
+    early = features(_sweep(held=4), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(early, CONTEXT) is None
+    # Still valid for the entry window after the hold, then gone.
+    later = features(_sweep(held=9), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(later, CONTEXT) is not None
+    stale = features(_sweep(held=10), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(stale, CONTEXT) is None
+
+
+def test_liquidity_sweep_needs_a_quick_snap_back():
+    slow = features(_sweep(slow=2), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(slow, CONTEXT) is None
+
+
+def test_liquidity_sweep_is_off_when_price_breaks_out_again():
+    relapse = ("199.6", "199.6", "199.1", "199.6", "199.6")  # closes back below 199.2
+    snap = features(_sweep(hold=relapse), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(snap, CONTEXT) is None
+    new_low = ("199.6", "199.6", "198.8", "199.6", "199.6")
+    snap = features(_sweep(hold=new_low), prior=history(10, low="199.2"))
+    assert LiquiditySweep().evaluate(snap, CONTEXT) is None
 
 
 # --- Trend following ---

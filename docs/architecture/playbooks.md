@@ -97,18 +97,30 @@ Owner: any session with a significant support or resistance level from the
 last or current session. Price crosses the level and sweeps right back in;
 higher conviction when the sweep comes on high volume.
 
+Owner refinement (2026-10-21): only a quick snap back counts, and price must
+then fail to break out again for 5 minutes (works especially well on MSTR).
+
 Levels: the prior session's high, low, close and POC, today's opening range
 (once complete), and today's high and low from before the sweep. Trigger:
-within the last ``sweep_window`` completed bars a bar pierced a level by at
-least ``min_pierce_bp``, price had been on the other side before, and the last
-completed bar closed back there. Entry: limit at the current price. Stop:
-beyond the sweep's extreme, at least the volatility floor. Target:
-``target_r`` × the risk. When several levels were swept, the deepest pierce wins.
+
+1. **Sweep:** a bar pierced a level by at least ``min_pierce_bp`` while price
+   had been on the other side before;
+2. **Snap back:** a bar within ``reclaim_within_bars`` of the pierce (the
+   sweep bar itself counts) closed back on the original side;
+3. **Hold:** for at least ``hold_minutes`` after that, no bar closed beyond the
+   level again and none traded past the sweep's extreme.
+
+The setup stays valid for ``entry_window_minutes`` after the hold is complete.
+Entry: limit at the current price. Stop: beyond the sweep's extreme, at least
+the volatility floor. Target: ``target_r`` × the risk. When several levels
+qualify, the most recent confirmation, then the deepest pierce, wins.
 
 | Parameter | Default | Min | Max | Meaning |
 | - | - | - | - | - |
-| `sweep_window` | 5 | 1 | 15 | bars the sweep happened in |
 | `min_pierce_bp` | 3 | 1 | 30 | how far past the level |
+| `reclaim_within_bars` | 2 | 1 | 5 | bars from the pierce to the close back inside |
+| `hold_minutes` | 5 | 2 | 15 | minutes price must stay back inside |
+| `entry_window_minutes` | 5 | 1 | 15 | minutes the setup stays valid after the hold |
 | `high_volume_multiple` | 2 | 1.2 | 5 | sweep volume × session average |
 | `target_r` | 2.5 | 2.1 | 5 | R, net of costs |
 | `max_hold_minutes` | 60 | 1 | 120 |  |
