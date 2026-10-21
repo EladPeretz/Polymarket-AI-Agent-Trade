@@ -76,7 +76,8 @@ on the same day). Look at the end of `data/engine.log`, then go to step 4.
 ## 4. After the close
 
 When `next_event` returns `session:close`, the guardian closes anything still
-open. Keep calling `next_event` until the engine stops answering, then:
+open. Keep calling `next_event` until it returns `session:ended` or the engine
+stops answering ("engine not reachable"), then:
 
 ```bash
 scripts/paper_session.sh finish
