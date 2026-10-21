@@ -502,6 +502,7 @@ async def _run(
         finally:
             feed_stop.set()
             await feed_task
+            bridge.end_session()
             await server.close()
             bridge.flush_latency()
             journal.record_outcomes(ledger)

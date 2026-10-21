@@ -167,6 +167,7 @@ class AgentBridge:
         self._reported: set[str] = set()
         self._entry_block: str | None = None
         self._halted = False
+        self._ended = False
         self.last_call_at: datetime | None = None
         self.last_seen_at: datetime | None = None
         self.calls_in_flight = 0
@@ -340,6 +341,21 @@ class AgentBridge:
             self.calls_in_flight -= 1
             self.last_seen_at = self._now()
 
+    def end_session(self) -> None:
+        """The engine is shutting down: answer waiting and later ``next_event`` calls at once.
+
+        Without this a ``next_event`` call made after the close would hold the
+        engine open until its own timeout (up to nine minutes).
+        """
+        if self._ended:
+            return
+        self._ended = True
+        self.notify(
+            TriggerKind.SESSION,
+            "session:ended",
+            "the session is over and the engine is shutting down: stop calling tools",
+        )
+
     def flush_latency(self) -> None:
         """Record delivered events the agent never answered (at session end)."""
         self._answer(None, None)
@@ -447,7 +463,7 @@ class AgentBridge:
         timeout = request.timeout_seconds
         if timeout is None:
             timeout = self._config.agent.next_event_timeout_seconds
-        if not self._queue and timeout > 0:
+        if not self._queue and timeout > 0 and not self._ended:
             self._wakeup.clear()
             try:
                 await asyncio.wait_for(self._wakeup.wait(), timeout)
