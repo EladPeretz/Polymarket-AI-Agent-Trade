@@ -14,6 +14,7 @@ venv/
 *.key
 secrets/
 
-# Local data
+# Local data (results are published to the paper-results branch, ADR-0006)
 data/
+results/
 *.parquet

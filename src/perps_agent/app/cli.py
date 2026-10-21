@@ -10,6 +10,9 @@ from datetime import date
 from pathlib import Path
 
 from perps_agent import __version__
+from perps_agent.agent import TransportError, system_prompt
+from perps_agent.agent import request as agent_request
+from perps_agent.app.session import briefing_for, run_paper_session
 from perps_agent.calendar import CalendarError, TradingCalendar
 from perps_agent.clock import utc_now
 from perps_agent.config import (
@@ -20,9 +23,11 @@ from perps_agent.config import (
     load_config,
     load_secrets,
     readiness_problems,
+    require_ready,
 )
 from perps_agent.log import configure_logging
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
+from perps_agent.strategy.playbooks import load_playbooks
 from perps_agent.venue import InstrumentRegistry, VenueError, create_market_data
 
 
@@ -56,7 +61,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="exchange date, YYYY-MM-DD (default: today in New York)",
     )
 
+    run = commands.add_parser(
+        "run",
+        help="run today's paper session: engine, simulator and the agent's tool server",
+    )
+    run.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
+    agent = commands.add_parser(
+        "agent",
+        help="call one of the agent's tools on the running engine (prints JSON)",
+    )
+    agent.add_argument("tool", help="tool name; 'tools' lists them with their input schemas")
+    agent.add_argument(
+        "args", nargs="?", default=None, help="arguments as one JSON object ('-' reads stdin)"
+    )
+    agent.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
+    prompt = commands.add_parser(
+        "prompt", help="print the agent's system prompt and today's briefing"
+    )
+    prompt.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    prompt.add_argument("--date", type=date.fromisoformat, help="exchange date, YYYY-MM-DD")
+
     args = parser.parse_args(argv)
+    if args.command == "run":
+        return _run(args.config)
+    if args.command == "agent":
+        return _agent(args.config, args.tool, args.args)
+    if args.command == "prompt":
+        return _prompt(args.config, args.date)
     if args.command == "config-check":
         return _config_check(args.config, args.mode, strict=args.strict)
     if args.command == "record":
@@ -167,6 +200,82 @@ def _calendar(path: Path, day: date | None) -> int:
         )
     print(json.dumps(report, indent=2))
     return 0 if window is not None else EXIT_NOT_TRADING_DAY
+
+
+def _run(path: Path) -> int:
+    """Run today's paper session. Live mode is not available (no live gateway yet)."""
+    try:
+        config = load_config(path)
+        secrets = load_secrets()
+        if config.mode is not Mode.PAPER:
+            raise ConfigError(f"run supports paper mode only, not {config.mode.value}")
+        require_ready(config, secrets)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    configure_logging(secrets=secrets.secret_values())
+    try:
+        return asyncio.run(
+            run_paper_session(config, playbooks=load_playbooks(), secrets=secrets.secret_values())
+        )
+    except (VenueError, FileExistsError) as error:
+        logging.getLogger(__name__).error("session failed", extra={"error": str(error)})
+        return 1
+
+
+# Seconds the client waits beyond next_event's own timeout before giving up.
+_ANSWER_MARGIN = 30
+
+
+def _agent(path: Path, tool: str, raw: str | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    if raw == "-":
+        raw = sys.stdin.read()
+    try:
+        tool_args = json.loads(raw) if raw and raw.strip() else {}
+    except ValueError as error:
+        print(json.dumps({"ok": False, "error": f"arguments are not valid JSON: {error}"}))
+        return 2
+    if not isinstance(tool_args, dict):
+        print(json.dumps({"ok": False, "error": "arguments must be one JSON object"}))
+        return 2
+    wait = config.agent.next_event_timeout_seconds
+    if tool == "next_event" and isinstance(tool_args.get("timeout_seconds"), int):
+        wait = tool_args["timeout_seconds"]
+    try:
+        answer = asyncio.run(
+            agent_request(
+                Path(config.agent.socket_path), tool, tool_args, timeout=wait + _ANSWER_MARGIN
+            )
+        )
+    except TransportError as error:
+        print(json.dumps({"ok": False, "error": str(error)}))
+        return 1
+    print(json.dumps(answer, indent=1, default=str))
+    return 0 if answer.get("ok") else 1
+
+
+def _prompt(path: Path, day: date | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    calendar = TradingCalendar(config.session)
+    if day is None:
+        day = utc_now().astimezone(config.session.zone).date()
+    try:
+        briefing = briefing_for(config, calendar, day, load_playbooks())
+    except CalendarError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(system_prompt())
+    print(briefing)
+    return 0
 
 
 if __name__ == "__main__":

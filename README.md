@@ -51,6 +51,17 @@ non-trading days):
 .venv/bin/perps-agent calendar --date 2026-11-27   # early close: window capped at 13:00
 ```
 
+Run today's paper session (engine, simulator and the agent's tool server), and
+call the agent's tools from another shell (ADR-0011):
+
+```bash
+.venv/bin/perps-agent run                     # paper mode only; exits 3 on non-trading days
+.venv/bin/perps-agent prompt                  # the agent's system prompt and today's briefing
+.venv/bin/perps-agent agent tools             # tools and their input schemas
+.venv/bin/perps-agent agent next_event '{"timeout_seconds": 60}'
+.venv/bin/perps-agent agent get_snapshot '{"symbol": "NVDA-USD"}'
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

@@ -6,3 +6,7 @@ autonomy:
   L0: true
   L1: true
   L2: true
+
+# Briefing notes for the agent (owner inputs, 2026-10-20).
+notes: >-
+  Crude oil, not an equity. EIA inventory data (Wednesdays 10:30 New York) moves it inside the window.

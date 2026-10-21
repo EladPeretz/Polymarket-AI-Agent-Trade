@@ -31,6 +31,9 @@ perps-agent = "perps_agent.app.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+perps_agent = ["agent/prompts/*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

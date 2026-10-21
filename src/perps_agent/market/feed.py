@@ -15,6 +15,10 @@ Two tasks run until ``stop`` is set:
   - no frame at all for ``resubscribe_after`` closes the subscription so the
     stream loop opens a new one.
 
+Listeners (``on_event``, ``on_rest``) see every applied stream event and REST
+re-snapshot, so the paper simulator and the bar builder follow the same data
+as the store.
+
 It only reads public market data: no credentials, no orders.
 """
 
@@ -35,6 +39,7 @@ from perps_agent.venue import (
     VenueError,
 )
 from perps_agent.venue.interfaces import BookDepth
+from perps_agent.venue.models import MarketEvent, OrderBook, Ticker, Trade
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +57,8 @@ class MarketFeed:
         *,
         recorder: Recorder | None = None,
         clock: Callable[[], datetime] = utc_now,
+        on_event: Callable[[MarketEvent], None] | None = None,
+        on_rest: Callable[[OrderBook, Ticker, Sequence[Trade]], None] | None = None,
     ) -> None:
         if not instruments:
             raise ValueError("the feed needs at least one instrument")
@@ -59,6 +66,8 @@ class MarketFeed:
         self._config = config
         self._recorder = recorder
         self._clock = clock
+        self._on_event = on_event
+        self._on_rest = on_rest
         self.store = MarketStateStore(
             instruments,
             stale_after=timedelta(milliseconds=config.stale_after_ms),
@@ -106,9 +115,12 @@ class MarketFeed:
                     async for event in stream:
                         self._last_frame_at = event.received_at
                         target = instrument_of(event)
-                        if self.store.apply_stream(event) and self._recorder is not None:
-                            assert target is not None  # applied events always have one
-                            self._recorder.stream(event, target)
+                        if self.store.apply_stream(event):
+                            if self._recorder is not None:
+                                assert target is not None  # applied events always have one
+                                self._recorder.stream(event, target)
+                            if self._on_event is not None:
+                                self._on_event(event)
             except VenueError as error:
                 log.warning("market stream failed", extra={"error": str(error)})
             finally:
@@ -189,6 +201,8 @@ class MarketFeed:
         self._next_resync.pop(instrument_id, None)
         if self._recorder is not None:
             self._recorder.rest(instrument_id, book=book, ticker=ticker, trades=trades, at=now)
+        if self._on_rest is not None:
+            self._on_rest(book, ticker, trades)
         self._stale.discard(instrument_id)
         log.info("market data fresh", extra={"symbol": self.store.symbol(instrument_id)})
         self._status(instrument_id, "fresh", now)
