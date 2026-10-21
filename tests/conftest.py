@@ -14,7 +14,7 @@ COMPLETE_RISK = {
     "max_l2_trades_per_day": 2,
     "min_stop_distance_bp": 10,
     "max_spread_bp": 8,
-    "min_top_of_book_notional": 2000,
+    "min_book_depth_notional": 2000,
     "liquidation_buffer_fraction": 0.5,
 }
 

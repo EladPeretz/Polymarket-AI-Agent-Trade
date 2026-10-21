@@ -80,7 +80,8 @@ risk:
   min_stop_distance_bp: 20          # absolute stop floor
   stop_floor_range_multiple: 1      # stop ≥ this × the symbol's recent 15-minute range (WP9)
   max_spread_bp: 6
-  min_top_of_book_notional: 2000    # pUSD
+  min_book_depth_notional: 1000     # pUSD resting on each side, within the band below
+  book_depth_band_bp: 25            # count book levels within this of each side's best price
   liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
   max_snapshot_age_ms: 2000         # also how long an approved verdict may wait to be sent
   stop_slippage_bp: 5               # sizing counts this beyond the stop, plus fees
@@ -97,6 +98,7 @@ sim:
 # Order handling (docs/architecture/overview.md §3.8).
 execution:
   entry_timeout_seconds: 120        # cancel a limit entry still working after this
+  max_entry_timeout_seconds: 900    # the agent may ask for up to this per entry
   exit_slippage_bp: 50              # exits are reduce-only IOC limited this far through mark
   trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
   trail_min_step_bp: 2              # ... and only by at least this much

@@ -103,7 +103,8 @@ def build_briefing(
         "counting what open positions would lose at their stops. It is the only stop for "
         "the day.",
         f"* At most {risk.max_concurrent_positions} positions at once, one per symbol; "
-        f"{risk.max_trades_per_day} entries a day, of which {risk.max_l2_trades_per_day} L2.",
+        f"{risk.max_trades_per_day} entries a day, of which {risk.max_l2_trades_per_day} L2. "
+        "An entry that is cancelled without any fill gives its slot back.",
         f"* Stops at least the 15-minute range from entry (never under "
         f"{risk.min_stop_distance_bp} bp); a target, if set, at least {risk.min_reward_risk}R "
         "after costs.",

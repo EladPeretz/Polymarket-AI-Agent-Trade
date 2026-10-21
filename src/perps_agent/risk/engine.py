@@ -11,7 +11,8 @@ at once. Rules, by the numbers of §3.7:
 1. Entry window open and before the cutoff; symbol and autonomy level enabled;
    instrument not close-only or settled.
 2. Snapshot fresh and no older than ``max_snapshot_age_ms``; spread within
-   ``max_spread_bp``; top-of-book notional on both sides ≥ ``min_top_of_book_notional``.
+   ``max_spread_bp``; resting notional on each side of the book, over the levels
+   within ``book_depth_band_bp`` of that side's best price, ≥ ``min_book_depth_notional``.
 3. Stop on the correct side and at least the volatility stop floor from
    entry: ``stop_floor_range_multiple`` × the symbol's recent 15-minute range,
    and never closer than ``min_stop_distance_bp``. Without a 15-minute range
@@ -68,7 +69,7 @@ from perps_agent.risk.sizing import (
     sweep_price,
 )
 from perps_agent.risk.state import PositionRisk, RiskState
-from perps_agent.venue import Instrument, OrderRequest, Side, TimeInForce
+from perps_agent.venue import BookLevel, Instrument, OrderRequest, Side, TimeInForce
 from perps_agent.venue.models import UtcDatetime
 from perps_agent.venue.rules import check_order, round_price, round_quantity
 
@@ -514,14 +515,16 @@ class RiskEngine:
         if bid is None or ask is None or spread is None or snapshot.mark_price is None:
             reject(RiskCheck.NO_MARKET, "no two-sided book or no mark price")
             return
-        assert config.max_spread_bp is not None and config.min_top_of_book_notional is not None
+        assert config.max_spread_bp is not None and config.min_book_depth_notional is not None
         if spread > config.max_spread_bp:
             reject(RiskCheck.SPREAD, f"spread {spread:.2f} bp > {config.max_spread_bp} bp")
-        depth = min(bid.price * bid.quantity, ask.price * ask.quantity)
-        if depth < config.min_top_of_book_notional:
+        band = config.book_depth_band_bp / 10_000
+        depth = min(_depth(snapshot.bids, band), _depth(snapshot.asks, band))
+        if depth < config.min_book_depth_notional:
             reject(
                 RiskCheck.DEPTH,
-                f"top of book {depth:.2f} < {config.min_top_of_book_notional} on one side",
+                f"book depth {depth:.2f} < {config.min_book_depth_notional} on one side "
+                f"(levels within {config.book_depth_band_bp} bp)",
             )
 
     def _check_portfolio(
@@ -647,3 +650,14 @@ class RiskEngine:
     def _daily_loss_limit(self, state: RiskState) -> Decimal:
         assert self._config.daily_loss_limit_fraction is not None
         return state.day_start_equity * self._config.daily_loss_limit_fraction
+
+
+def _depth(levels: Sequence[BookLevel], band: Decimal) -> Decimal:
+    """Notional resting on one side of the book within ``band`` (a fraction) of its best price."""
+    if not levels:
+        return Decimal(0)
+    reach = levels[0].price * band
+    return sum(
+        (lv.price * lv.quantity for lv in levels if abs(lv.price - levels[0].price) <= reach),
+        Decimal(0),
+    )

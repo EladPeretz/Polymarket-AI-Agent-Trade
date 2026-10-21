@@ -289,6 +289,24 @@ def test_wide_spread_and_thin_book_are_rejected():
     assert _checks(thin) == {RiskCheck.DEPTH}
 
 
+def test_depth_counts_the_levels_within_the_band():
+    # 5 × ~200 = 1000 at the touch, plus 6 more within 25 bp: enough on each side.
+    layered = snapshot(
+        bids=(("199.98", "5"), ("199.70", "6"), ("199.00", "50")),
+        asks=(("200.02", "5"), ("200.30", "6"), ("201.00", "50")),
+    )
+    assert _checks(_evaluate(snap=layered)) == set()
+    # Only the best level counts with a zero band.
+    top_only = RISK.model_copy(update={"book_depth_band_bp": Decimal(0)})
+    assert _checks(_evaluate(snap=layered, risk=top_only)) == {RiskCheck.DEPTH}
+    # A level beyond the band does not count.
+    far = snapshot(
+        bids=(("199.98", "5"), ("199.00", "50")),
+        asks=(("200.02", "5"), ("201.00", "50")),
+    )
+    assert _checks(_evaluate(snap=far)) == {RiskCheck.DEPTH}
+
+
 def test_one_sided_book_is_rejected():
     snap = snapshot().model_copy(update={"asks": ()})
     assert RiskCheck.NO_MARKET in _checks(_evaluate(snap=snap))

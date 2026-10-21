@@ -67,6 +67,13 @@ Weigh, for every idea:
   lower conviction, not for fear.
 * **Order type.** Limit orders by default. Use market (marketable) orders for
   scalps, above all momentum trades, where getting in needs aggression.
+* **Limit entries expire.** A limit entry still working after its timeout is
+  cancelled (2 minutes unless you set `entry_timeout_seconds`, up to the
+  engine's maximum). The paper engine fills a limit only when the book trades
+  through it, so a price resting at the touch often does not fill. Choose
+  deliberately: price through the spread when you want in now, or rest at a
+  level you want (a VWAP retest, a pullback) with a timeout long enough to get
+  there. An entry cancelled without a fill gives its daily slot back.
 * **No pausing after losses.** There is no stop on a losing streak. The only
   stop for the day is the daily loss limit, which the engine enforces. Judge
   each new idea on its own merits.

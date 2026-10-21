@@ -108,6 +108,11 @@ class AgentConfig(_Model):
     # appear in snapshots, labelled unscreened; the agent may act on them only as
     # L2 (discretionary) trades. Owner decision, 2026-10-21.
     unscreened_playbook_signals: bool = True
+    # An entry rejected only for a thin book or a wide spread is evaluated again
+    # on fresh snapshots, up to this many times this far apart, before the
+    # rejection goes back to the agent. Owner decision, 2026-10-21.
+    market_recheck_attempts: Annotated[int, Field(ge=0, le=20)] = 6
+    market_recheck_interval_ms: Annotated[int, Field(ge=0, le=2_000)] = 500
 
 
 class MarketDataConfig(_Model):
@@ -156,7 +161,10 @@ class RiskConfig(_Model):
     # recent 15-minute range from entry (and never closer than min_stop_distance_bp).
     stop_floor_range_multiple: Annotated[Decimal, Field(ge=1, le=5)] = Decimal(1)
     max_spread_bp: PositiveDecimal | None = None
-    min_top_of_book_notional: PositiveDecimal | None = None
+    # Resting notional on each side of the book, counting the levels within
+    # book_depth_band_bp of that side's best price (0: the best level only).
+    min_book_depth_notional: PositiveDecimal | None = None
+    book_depth_band_bp: Annotated[Decimal, Field(ge=0, le=200)] = Decimal(25)
     # Stop must be at most this fraction of the distance from entry to liquidation.
     liquidation_buffer_fraction: Fraction | None = None
     max_snapshot_age_ms: Annotated[int, Field(ge=1)] = 2_000
@@ -232,6 +240,8 @@ class ExecutionConfig(_Model):
 
     # A limit entry still working after this long is cancelled.
     entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 120
+    # The longest timeout the agent may ask for on a single limit entry.
+    max_entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 900
     # Exits are reduce-only IOC orders limited this far through the mark, so a
     # thin book cannot fill them at any price.
     exit_slippage_bp: Annotated[Decimal, Field(gt=0, le=500)] = Decimal(50)

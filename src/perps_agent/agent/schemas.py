@@ -54,6 +54,9 @@ class _Order(_Model):
     # Fraction (0–1] of the per-trade risk budget.
     size: Fraction
     stop_price: PositiveDecimal
+    # How long a limit entry may work before it is cancelled; omitted: the
+    # configured default. The engine caps it at ``max_entry_timeout_seconds``.
+    entry_timeout_seconds: Annotated[int, Field(ge=10, le=3_600)] | None = None
 
     @model_validator(mode="after")
     def _order(self) -> Self:
@@ -61,6 +64,8 @@ class _Order(_Model):
             raise ValueError("a limit order needs limit_price")
         if self.order_type == "market" and (self.limit_price is not None or self.post_only):
             raise ValueError("a market order takes no limit_price and cannot be post_only")
+        if self.order_type == "market" and self.entry_timeout_seconds is not None:
+            raise ValueError("entry_timeout_seconds applies to limit orders only")
         return self
 
     @property

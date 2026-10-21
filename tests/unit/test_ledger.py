@@ -125,6 +125,47 @@ def test_funding_and_protection_apply_to_the_position():
     assert ledger.collateral == D("999.86")
 
 
+def _changed(coid: str, status: OrderStatus, filled: str = "0") -> OrderChanged:
+    return OrderChanged(
+        at=NOW,
+        client_order_id=coid,
+        status=status,
+        filled_quantity=D(filled),
+        resting_quantity=D(0),
+    )
+
+
+def test_an_entry_that_ends_unfilled_gives_its_slot_back():
+    ledger = Ledger(D(1000))
+    ledger.record(_sent("a" * 32, OrderPurpose.ENTRY, Side.BUY, level=AutonomyLevel.L2))
+    # A working entry counts, so the caps cannot be outrun with resting orders.
+    assert ledger.entries_today == 1 and ledger.l2_entries_today == 1
+    ledger.record(_changed("a" * 32, OrderStatus.CANCELLED))
+    assert ledger.entries_today == 0 and ledger.l2_entries_today == 0
+    ledger.record(_changed("a" * 32, OrderStatus.CANCELLED))  # repeated: no double release
+    assert ledger.entries_today == 0
+
+    ledger.record(_sent("b" * 32, OrderPurpose.ENTRY, Side.BUY, level=AutonomyLevel.L2))
+    ledger.record(_changed("b" * 32, OrderStatus.CANCELLED, filled="1"))  # partly filled
+    assert ledger.entries_today == 1 and ledger.l2_entries_today == 1
+
+
+def test_a_late_fill_counts_the_entry_again():
+    ledger = Ledger(D(1000))
+    ledger.record(_sent("a" * 32, OrderPurpose.ENTRY, Side.BUY, level=AutonomyLevel.L2))
+    ledger.record(_changed("a" * 32, OrderStatus.CANCELLED))
+    ledger.record(_fill("a" * 32, Side.BUY, "200", "1"))
+    assert ledger.entries_today == 1 and ledger.l2_entries_today == 1
+
+
+def test_an_entry_from_an_earlier_day_does_not_release_todays_slot():
+    ledger = Ledger(D(1000))
+    ledger.record(_sent("a" * 32, OrderPurpose.ENTRY, Side.BUY))
+    ledger.record(DayStarted(at=NOW, day=NOW.date(), equity=D(1000)))
+    ledger.record(_changed("a" * 32, OrderStatus.CANCELLED))
+    assert ledger.entries_today == 0
+
+
 def test_order_status_and_day_counters():
     ledger = Ledger(D(1000))
     ledger.record(_sent("a" * 32, OrderPurpose.ENTRY, Side.BUY))

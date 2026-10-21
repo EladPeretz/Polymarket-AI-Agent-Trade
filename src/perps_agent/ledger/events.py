@@ -68,6 +68,8 @@ class OrderSent(_Event):
     time_stop: UtcDatetime | None = None
     approved_risk: Decimal | None = None
     leverage: int | None = None
+    # Limit entries and adds: cancelled if still working this long after being sent.
+    timeout_seconds: int | None = None
 
 
 class OrderFailed(_Event):

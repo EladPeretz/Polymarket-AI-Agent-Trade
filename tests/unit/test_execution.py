@@ -113,6 +113,23 @@ def test_limit_entry_is_cancelled_after_the_timeout():
     assert desk.run(desk.execution.risk_state()).pending_entries == frozenset()
 
 
+def test_an_entry_can_ask_for_its_own_timeout_within_the_maximum():
+    desk = Desk(entry_timeout_seconds=60, max_entry_timeout_seconds=300)
+    desk.market(0)
+    verdict = desk.enter(intent(entry="199.50", stop="198.50", entry_timeout_seconds=600))
+    assert verdict.order is not None
+    coid = verdict.order.client_order_id
+    assert desk.ledger.order(coid).sent.timeout_seconds == 300  # capped
+    desk.market(120_000)
+    desk.tick()
+    assert desk.ledger.order(coid).is_live
+    desk.market(300_000)
+    desk.tick()
+    assert desk.ledger.order(coid).status is OrderStatus.CANCELLED
+    # Cancelled without a fill: the entry no longer counts toward the day.
+    assert desk.run(desk.execution.risk_state()).trades_today == 0
+
+
 def test_entries_count_toward_the_day():
     desk = Desk()
     desk.market(0)
