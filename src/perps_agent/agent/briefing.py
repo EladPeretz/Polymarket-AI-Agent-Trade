@@ -10,7 +10,7 @@ calibration statistics join it with the learning loop (WP14).
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -70,6 +70,8 @@ def build_briefing(
     if window is None:
         lines += ["Not a trading day: no window today.", ""]
     else:
+        warmup = config.features.regime_min_minutes
+        regime_from = window.market.open + timedelta(minutes=warmup)
         lines += [
             "## Window (New York)",
             "",
@@ -77,6 +79,9 @@ def build_briefing(
             f"{window.end.astimezone(zone):%H:%M}; entries until "
             f"{window.entry_cutoff.astimezone(zone):%H:%M}; everything is flat by "
             f"{window.end.astimezone(zone):%H:%M}.",
+            f"* Regime labels appear from {regime_from.astimezone(zone):%H:%M} "
+            f"({warmup} minutes after the open); until then `regime` is null and the "
+            "opening range is still forming.",
         ]
         if window.market.early_close:
             lines.append(

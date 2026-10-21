@@ -44,7 +44,9 @@ loop. Be honest with the probabilities; they are scored against outcomes.
 Weigh, for every idea:
 
 * the session regime (volatility: expansion / normal / compressed; structure:
-  trend up / trend down / rotation);
+  trend up / trend down / rotation). It is null for the first minutes of the
+  session (the briefing says until when): that is expected, not a fault, so
+  judge the open from price against the open, VWAP and prior levels;
 * how the ticker has performed lately and whether it usually trends hard or
   consolidates (the `ticker` block and the symbol notes);
 * the spread of outcomes from `simulate` runs, once that tool exists;
