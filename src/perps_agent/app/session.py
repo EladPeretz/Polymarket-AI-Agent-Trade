@@ -23,7 +23,9 @@ and writes the daily report (:mod:`perps_agent.report`) into ``results/<date>/``
 """
 
 import asyncio
+import contextlib
 import logging
+import signal
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -73,6 +75,9 @@ log = logging.getLogger(__name__)
 # Market events are applied this often; features and triggers every step.
 PUMP_INTERVAL = timedelta(milliseconds=100)
 STEP_INTERVAL = timedelta(seconds=1)
+# An early end waits at most this long for the book to go flat.
+EARLY_END_GRACE = timedelta(seconds=60)
+EARLY_END_HOLD = "operator_stop"
 
 
 class SessionEngine:
@@ -501,9 +506,15 @@ async def _run(
         )
         feed_stop = asyncio.Event()
         feed_task = asyncio.create_task(feed.run(feed_stop))
+        # SIGTERM (scripts/paper_session.sh stop) ends the session early, flat.
+        end_early = asyncio.Event()
+        with contextlib.suppress(NotImplementedError, RuntimeError):
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, end_early.set)
         try:
-            await _loop(engine, guardian, sampler, stop)
+            await _loop(engine, guardian, sampler, stop, execution, end_early)
         finally:
+            with contextlib.suppress(NotImplementedError, RuntimeError):
+                asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
             feed_stop.set()
             await feed_task
             bridge.end_session()
@@ -524,10 +535,20 @@ async def _run(
 
 
 async def _loop(
-    engine: SessionEngine, guardian: Guardian, sampler: EquitySampler, stop: asyncio.Event
+    engine: SessionEngine,
+    guardian: Guardian,
+    sampler: EquitySampler,
+    stop: asyncio.Event,
+    execution: ExecutionEngine | None = None,
+    end_early: asyncio.Event | None = None,
 ) -> None:
-    """Pump, step, then the guardian, each failure recorded without stopping the others."""
+    """Pump, step, then the guardian, each failure recorded without stopping the others.
+
+    Once ``end_early`` is set, entries are held and everything is closed; the
+    loop ends when the book is flat, or after ``EARLY_END_GRACE`` at the latest.
+    """
     next_step = utc_now()
+    ending_since: datetime | None = None
     while not stop.is_set():
         try:
             await engine.pump()
@@ -552,6 +573,17 @@ async def _loop(
             next_step = now + STEP_INTERVAL
             if guardian.session_over(now):
                 break
+            if execution is not None and end_early is not None and end_early.is_set():
+                if ending_since is None:
+                    ending_since = now
+                    log.warning("session ending early: stop requested by the operator")
+                    execution.hold_entries(EARLY_END_HOLD, "session ended early by the operator")
+                    try:
+                        await execution.close_all("session ended early by the operator")
+                    except Exception:
+                        log.exception("early end: close all failed")
+                if guardian.flat or now - ending_since >= EARLY_END_GRACE:
+                    break
         try:
             await asyncio.wait_for(stop.wait(), PUMP_INTERVAL.total_seconds())
         except TimeoutError:

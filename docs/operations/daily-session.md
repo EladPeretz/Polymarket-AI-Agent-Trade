@@ -73,10 +73,28 @@ scripts/paper_session.sh status
 If it is not running, do not restart it (`run` refuses to start a second session
 on the same day). Look at the end of `data/engine.log`, then go to step 4.
 
+### Ending early
+
+When nothing more can happen today, end the session instead of waiting for the
+close. That is the case when no entry is possible for the rest of the window
+and you are flat: `get_portfolio` shows `trades_today` or `l2_trades_today` at
+its cap (with no screened playbook to trade at L0/L1, the L2 cap is the limit),
+or `entries_halted` (daily loss limit or kill switch), with no position and no
+working entry. Journal one line saying why, then:
+
+```bash
+scripts/paper_session.sh stop
+```
+
+It asks the engine to end the session (entries held, everything closed) and
+waits for it to exit (exit 4: still running, run it again). Then go to step 4
+and run `finish`. Never stop early while a position is open or while entries
+are still possible.
+
 ## 4. After the close
 
-When `next_event` returns `session:close`, the guardian closes anything still
-open. Keep calling `next_event` until it returns `session:ended` or the engine
+After an early stop, run `finish` directly. Otherwise, when `next_event`
+returns `session:close`, the guardian closes anything still open. Keep calling `next_event` until it returns `session:ended` or the engine
 stops answering ("engine not reachable"), then:
 
 ```bash
