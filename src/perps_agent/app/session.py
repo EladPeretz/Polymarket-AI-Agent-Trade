@@ -34,6 +34,7 @@ from typing import Any
 
 from perps_agent.agent import AgentBridge, BridgeServer, build_briefing, recent_activity
 from perps_agent.agent.latency import AGENT_EVENTS_FILE, JsonlLatencySink
+from perps_agent.backtest import screened_playbooks
 from perps_agent.calendar import TradingCalendar, TradingWindow
 from perps_agent.clock import to_utc, utc_now
 from perps_agent.config.models import AppConfig, Mode
@@ -467,6 +468,7 @@ async def _run(
             bars=bars,
         )
         engine_box.append(engine)
+        screened = screened_playbooks(Path(config.agent.results_dir), config.agent.exempt_playbooks)
         bridge = AgentBridge(
             config=config,
             market=engine,
@@ -477,12 +479,9 @@ async def _run(
             journal=journal,
             calendar=calendar,
             playbooks=playbooks,
-            # Gate 1 (WP13) has not screened any playbook version yet; the
-            # owner-exempt initial versions count as screened.
-            screened=config.agent.exempt_playbooks,
-            briefing=lambda: briefing_for(
-                config, calendar, day, playbooks, config.agent.exempt_playbooks
-            ),
+            # Gate 1 passes (WP13) and the owner-exempt initial versions.
+            screened=screened,
+            briefing=lambda: briefing_for(config, calendar, day, playbooks, screened),
             latency_sink=latency_sink,
         )
         engine.bridge = bridge

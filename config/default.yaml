@@ -116,6 +116,17 @@ execution:
   trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
   trail_min_step_bp: 2              # ... and only by at least this much
 
+# Playbook backtest and Gate 1 screen (docs/architecture/go-no-go.md, ADR-0008).
+# Not learnable (ADR-0010).
+backtest:
+  window_days: 91                   # rolling window, calendar days before the run date
+  data_dir: data/backtest           # cached bars and funding (git-ignored)
+  max_concurrent_requests: 4
+  marketable_slippage_bp: 3         # marketable entries fill this far through the mark
+  min_expectancy_r: 0               # Gate 1: in-target net expectancy per trade, R
+  max_trade_share: 0.25             # Gate 1: no trade above this share of net PnL
+  review_sample: 10                 # trades listed per playbook for review
+
 # Guardian (docs/architecture/overview.md §3.10). Not learnable (ADR-0010).
 guardian:
   kill_switch: false                # true: close everything, no entries, every session

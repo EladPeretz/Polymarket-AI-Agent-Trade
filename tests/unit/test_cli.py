@@ -100,3 +100,33 @@ def test_a_failed_publish_is_recorded_as_an_incident(write_config, tmp_path, mon
     assert main(["publish", "--config", str(path)]) == 1
     incident = json.loads((results / "2026-10-20" / "incidents.jsonl").read_text())
     assert incident["kind"] == "publish_failed" and incident["severity"] == "critical"
+
+
+def test_backtest_refuses_unknown_symbols_and_bad_params(write_config, tmp_path, capsys):
+    path = str(write_config({"risk": COMPLETE_RISK, "sim": COMPLETE_SIM}))
+    assert main(["backtest", "--config", path, "--symbol", "AAPL-USD"]) == 1
+    assert "unknown symbols: AAPL-USD" in capsys.readouterr().err
+    params = tmp_path / "params.yaml"
+    params.write_text(yaml.safe_dump({"momentum_scalp": {"target_r": 9}}))
+    assert main(["backtest", "--config", path, "--params", str(params)]) == 1
+    assert "momentum_scalp" in capsys.readouterr().err
+    params.write_text("[1, 2]")
+    assert main(["backtest", "--config", path, "--params", str(params)]) == 1
+
+
+def test_backtest_needs_capital_values(write_config, capsys):
+    assert main(["backtest", "--config", str(write_config({}))]) == 1
+    assert "not ready for backtest mode" in capsys.readouterr().err
+
+
+def test_prompt_lists_gate1_passes_as_screened(write_config, tmp_path, capsys):
+    tag = next(p.tag for p in load_playbooks() if p.id == "momentum_scalp")
+    results = tmp_path / "results"
+    (results / "gate1").mkdir(parents=True)
+    (results / "gate1" / f"{tag}.json").write_text(json.dumps({"tag": tag, "verdict": "pass"}))
+    path = write_config(
+        {"risk": COMPLETE_RISK, "sim": COMPLETE_SIM, "agent": {"results_dir": str(results)}}
+    )
+    assert main(["prompt", "--config", str(path), "--date", "2026-10-20"]) == 0
+    out = capsys.readouterr().out
+    assert f"Screened (may trade as L0/L1): {tag}." in out

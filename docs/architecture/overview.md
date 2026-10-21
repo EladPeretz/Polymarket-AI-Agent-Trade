@@ -246,10 +246,11 @@ Implementation (`agent/`, WP10).
 * **Proposals** name a source, not a level. `discretionary` is L2. A
   `playbook:<id>` proposal must match a live setup of that playbook and its
   version must have passed Gate 1; taking the setup unchanged is L0, changing
-  its prices L1, never above the setup's size cap. Until WP13 no playbook is
-  screened, so playbook setups are shown labelled `"screened": false` and the
-  agent may act on them only as L2 (owner decision 2026-10-21,
-  `agent.unscreened_playbook_signals`).
+  its prices L1, never above the setup's size cap. Screened versions are the
+  owner-exempt initial ones (`agent.exempt_playbooks`) and those whose Gate 1
+  record (`results/gate1/`, §5) is a pass. Setups of any other version are shown
+  labelled `"screened": false` and the agent may act on them only as L2 (owner
+  decision 2026-10-21, `agent.unscreened_playbook_signals`).
 * **Events from execution:** the bridge reads new ledger events and tells the
   agent when an entry or add filled, partly filled or ended unfilled, when a
   stop or target triggered, when a position closed (net PnL, R, reason), and
@@ -464,8 +465,13 @@ updates, fills, funding payments, TP/SL triggers and liquidations it caused.
   between records the last book is taken to still hold while the feed was live,
   and nothing is assumed while it was stale.
 * Not modelled yet: bracket TP/SL on entry (the execution layer sets the
-  position TP/SL after the fill), cross margin, order modification, and the
-  candle-based backtest model (WP13).
+  position TP/SL after the fill), cross margin and order modification.
+* The backtest's reduced model (WP13, `backtest/runner.py`) plays the same
+  rules on minute bars, conservatively: a marketable entry fills at the next
+  minute's first mark plus `backtest.marketable_slippage_bp`; a limit entry
+  only when a traded minute went through the limit; stops and targets trigger
+  on mark bars and fill less `risk.stop_slippage_bp`, the stop first when one
+  bar reaches both; funding at each settlement (§5).
 
 ### 3.10 Guardian (`guardian/`)
 
@@ -637,6 +643,33 @@ Code session started by the server's scheduler.
    proof**: they check that a playbook behaves as designed in the regimes it targets
    and doesn't bleed in them. Re-run on every playbook version and on a regular
    cadence as the window rolls (ADR-0008).
+
+   Implementation (`backtest/`, `app/backtest.py`, WP13). `perps-agent
+   backtest [--symbol S] [--params file]` caches each symbol's days under
+   `backtest.data_dir`: 1-minute trade candles, minute bars of the 1-second mark
+   history (an hour before the open to the window end) and funding. Features
+   use a minute's trade candle if it traded and its marks otherwise, as
+   `MinuteBars` does live; prior-session summaries use the candles only, as
+   `load_history` does. Every minute of the window the features and playbooks
+   are computed exactly as in paper trading, each setup is taken as it stands
+   (L0) when it appears, one position per playbook and symbol, sized from the
+   per-trade risk budget, and played through the reduced fill model (§3.9).
+   Account-level limits are not applied: each version is judged alone. Every
+   trade is tagged with its entry regime and its session's regime at the
+   window end.
+
+   Gate 1 (go-no-go.md) is judged per version on the trades of target
+   sessions (session regime among the declared ones): it fired, net
+   expectancy ≥ `backtest.min_expectancy_r` (0R), no trade above
+   `backtest.max_trade_share` (25%) of net PnL, and no entry outside the
+   declared regimes. The record (`results/gate1/<tag>.json`: verdict,
+   criteria, breakdown by regime and symbol, other sessions, a sample of
+   `backtest.review_sample` trades for the trigger review) and the report
+   (`results/backtests/<date>/report.md`, `report.json`, `trades.jsonl`) are
+   published to the results branch with the days, file by file and never
+   removed (§3.12). `perps-agent fetch-results` brings back the records missing
+   locally or newer on the branch, so the session's screened set includes the
+   passes.
 5. **LLM evaluation is forward-only.** Backtesting Claude on past dates is not
    meaningful, because the model may already know what happened on those dates.
    The agent's value is measured in paper trading, attributed per autonomy level.
@@ -697,7 +730,7 @@ scripts/        one-off tools (e.g. connectivity check)
 12. Daily scheduling in Claude Code cloud + a dry-run session: `perps-agent
     preflight`, `perps-agent run --rehearsal`, `scripts/paper_session.sh`, the
     session runbook and the scheduled task (`docs/operations/`).
-13. Backtest runner for playbooks.
+13. Backtest runner for playbooks and the Gate 1 screen (§5).
 14. Learning loop (§3.13): lessons notebook, daily and weekly review, briefing,
     agent-state store with its bounds defined in `main`, and the `simulate` tool.
     After the backtest runner, because playbook changes must pass Gate 1.

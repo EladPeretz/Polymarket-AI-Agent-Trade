@@ -24,7 +24,8 @@ from perps_agent.venue.models import (
 )
 
 BookDepth = Literal[10, 100, 500, 1000]
-CandleInterval = Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
+# 1s: mark history only (the backtest builds minute bars from it).
+CandleInterval = Literal["1s", "1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 
 
 class MarketStream(Protocol):

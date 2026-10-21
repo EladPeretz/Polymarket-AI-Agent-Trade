@@ -78,6 +78,13 @@ class MomentumScalp(Playbook[MomentumScalpParams]):
             stop = last.high
         if not (broke and with_vwap):
             return None
+        # Thin symbols often have no trades in the lookback (mark-only bars).
+        average = average_volume(before)
+        volume = (
+            f"breakout volume {last.volume / average:.1f}× average"
+            if average > 0
+            else "breakout volume after minutes with none"
+        )
         return self._setup(
             features,
             context,
@@ -88,6 +95,6 @@ class MomentumScalp(Playbook[MomentumScalpParams]):
             hold_minutes=p.max_hold_minutes,
             reasons=(
                 f"{features.regime.structure} session, breakout of {p.breakout_lookback} bars",
-                f"breakout volume {last.volume / average_volume(before):.1f}× average",
+                volume,
             ),
         )

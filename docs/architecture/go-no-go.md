@@ -29,6 +29,13 @@ version that fails stays out of paper trading, or runs at `L0` (filter) only.
 Trade counts are reported, not required: a thin sample is acceptable because paper
 trading is the main evidence.
 
+`perps-agent backtest` runs the screen (overview §5). The three measurable
+criteria are automated, the regime check as "no entry outside the declared
+regimes", and a version with no trade in its target sessions fails. The trigger
+review is done by hand from the sample in each record
+(`results/gate1/<tag>.json`, `"review": "pending"`); a version whose automated
+criteria pass is screened (may trade as L0/L1) without waiting for it.
+
 **Exemption (owner decision, 2026-10-21):** the six initial playbook versions
 (`agent.exempt_playbooks` in `config/default.yaml`) trade as L0/L1 without
 Gate 1, so paper trading can use them before the backtest runner (WP13) exists.

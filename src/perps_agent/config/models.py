@@ -288,6 +288,26 @@ class GuardianConfig(_Model):
     equity_sample_seconds: Annotated[int, Field(ge=5, le=3_600)] = 60
 
 
+class BacktestConfig(_Model):
+    """The playbook backtest and its Gate 1 screen (go-no-go.md, ADR-0008). Not learnable."""
+
+    # The rolling window screened, in calendar days before the run date.
+    window_days: Annotated[int, Field(ge=7, le=365)] = 91
+    # Minute bars, trade candles and funding by symbol and day (git-ignored).
+    data_dir: str = "data/backtest"
+    # Requests to the venue in flight at once while filling the data cache.
+    max_concurrent_requests: Annotated[int, Field(ge=1, le=16)] = 4
+    # A marketable entry fills this far through the mark (half the spread
+    # plus impact), on top of the taker fee.
+    marketable_slippage_bp: Annotated[Decimal, Field(ge=0, le=100)] = Decimal(3)
+    # Gate 1: in-target net expectancy per trade, in R, must be at least this.
+    min_expectancy_r: Decimal = Decimal(0)
+    # Gate 1: no single trade may account for more than this share of net PnL.
+    max_trade_share: Fraction = Decimal("0.25")
+    # Trades listed per playbook for the reviewed sample.
+    review_sample: Annotated[int, Field(ge=0, le=100)] = 10
+
+
 class ResultsConfig(_Model):
     """Publishing ``results/<date>/`` to the results branch (ADR-0006)."""
 
@@ -345,6 +365,7 @@ class AppConfig(_Model):
     sim: SimConfig = SimConfig()
     execution: ExecutionConfig = ExecutionConfig()
     guardian: GuardianConfig = GuardianConfig()
+    backtest: BacktestConfig = BacktestConfig()
     results: ResultsConfig = ResultsConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]

@@ -1,3 +1,4 @@
+import json
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -144,3 +145,51 @@ def test_local_days_ignores_other_entries(tmp_path):
 def test_results_branch_cannot_be_main():
     with pytest.raises(ValueError):
         ResultsConfig(branch="main")
+
+
+def _gate1(results: Path, tag: str, run_at: str, verdict: str = "pass") -> Path:
+    path = results / "gate1" / f"{tag}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"tag": tag, "run_at": run_at, "verdict": verdict}))
+    return path
+
+
+def test_backtest_results_are_published_and_never_removed(repo, tmp_path):
+    results = repo / "results"
+    _gate1(results, "a@1.x", "2026-10-21T20:00:00+00:00")
+    (results / "backtests" / "2026-10-21").mkdir(parents=True)
+    (results / "backtests" / "2026-10-21" / "report.md").write_text("# backtest\n")
+    first = _publish(repo, [])
+    assert first.commit is not None and first.days == ()
+    assert _branch_files(repo) == [
+        "results/backtests/2026-10-21/report.md",
+        "results/gate1/a@1.x.json",
+    ]
+    remote = repo.parent / "remote.git"
+    assert _git(remote, "log", "-1", "--format=%s", "paper-results") == "Backtest results"
+
+    # A session elsewhere publishes its day without the backtest files: they stay.
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-q")
+    _git(other, "remote", "add", "origin", str(remote))
+    _day(other)
+    publish_results(other / "results", [DAY], config=CONFIG, repo=other)
+    assert "results/gate1/a@1.x.json" in _branch_files(repo)
+    assert "results/2026-10-20/report.md" in _branch_files(repo)
+
+
+def test_fetch_results_brings_missing_and_newer_gate1_records(repo, tmp_path):
+    results = repo / "results"
+    _gate1(results, "a@1.x", "2026-10-21T20:00:00+00:00")
+    _gate1(results, "b@1.y", "2026-10-21T20:00:00+00:00")
+    _publish(repo, [])
+    local = tmp_path / "local"
+    _gate1(local, "a@1.x", "2026-10-20T20:00:00+00:00", verdict="fail")  # older
+    _gate1(local, "b@1.y", "2026-10-22T20:00:00+00:00", verdict="fail")  # newer
+    fetch_results(local, config=CONFIG, repo=repo)
+    assert json.loads((local / "gate1" / "a@1.x.json").read_text())["verdict"] == "pass"
+    assert json.loads((local / "gate1" / "b@1.y.json").read_text())["verdict"] == "fail"
+    fresh = tmp_path / "fresh"
+    fetch_results(fresh, config=CONFIG, repo=repo)
+    assert sorted(p.name for p in (fresh / "gate1").iterdir()) == ["a@1.x.json", "b@1.y.json"]
