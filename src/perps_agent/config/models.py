@@ -108,6 +108,10 @@ class AgentConfig(_Model):
     # appear in snapshots, labelled unscreened; the agent may act on them only as
     # L2 (discretionary) trades. Owner decision, 2026-10-21.
     unscreened_playbook_signals: bool = True
+    # Playbook versions (tags ``<id>@<version>.<hash>``) treated as screened
+    # without Gate 1: the six initial versions. Any change makes a new tag,
+    # which needs the screen. Owner decision, 2026-10-21.
+    exempt_playbooks: tuple[str, ...] = ()
     # An entry rejected only for a thin book or a wide spread is evaluated again
     # on fresh snapshots, up to this many times this far apart, before the
     # rejection goes back to the agent. Owner decision, 2026-10-21.

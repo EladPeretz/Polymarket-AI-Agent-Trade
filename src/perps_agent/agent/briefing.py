@@ -120,6 +120,12 @@ def build_briefing(
     passed = [p for p in playbooks if p.tag in screened]
     if passed:
         lines.append("Screened (may trade as L0/L1): " + ", ".join(p.tag for p in passed) + ".")
+    exempt = set(config.agent.exempt_playbooks)
+    if any(p.tag in exempt for p in passed):
+        lines.append(
+            "The initial versions are exempt from Gate 1 by owner decision; a changed "
+            "version needs the screen."
+        )
     pending = [p.id for p in playbooks if p.tag not in screened]
     if pending:
         context = (

@@ -472,9 +472,12 @@ async def _run(
             journal=journal,
             calendar=calendar,
             playbooks=playbooks,
-            # Gate 1 (WP13) has not screened any playbook version yet.
-            screened=(),
-            briefing=lambda: briefing_for(config, calendar, day, playbooks),
+            # Gate 1 (WP13) has not screened any playbook version yet; the
+            # owner-exempt initial versions count as screened.
+            screened=config.agent.exempt_playbooks,
+            briefing=lambda: briefing_for(
+                config, calendar, day, playbooks, config.agent.exempt_playbooks
+            ),
             latency_sink=latency_sink,
         )
         engine.bridge = bridge

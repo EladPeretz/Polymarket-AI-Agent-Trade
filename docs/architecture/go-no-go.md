@@ -29,6 +29,13 @@ version that fails stays out of paper trading, or runs at `L0` (filter) only.
 Trade counts are reported, not required: a thin sample is acceptable because paper
 trading is the main evidence.
 
+**Exemption (owner decision, 2026-10-21):** the six initial playbook versions
+(`agent.exempt_playbooks` in `config/default.yaml`) trade as L0/L1 without
+Gate 1, so paper trading can use them before the backtest runner (WP13) exists.
+The exemption is by version tag: any change to a playbook's logic or parameters
+makes a new tag, which must pass Gate 1. `perps-agent config-check` flags an
+exempt tag that no longer matches a playbook.
+
 ## Gate 2 — Paper trading → live pilot (end of Phase 3 simulation)
 
 All of the following, measured on paper trading with the live data feed:

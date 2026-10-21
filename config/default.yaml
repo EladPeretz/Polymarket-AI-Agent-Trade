@@ -32,6 +32,15 @@ agent:
   socket_path: data/agent.sock      # the engine serves the agent's tools here
   results_dir: results              # journals and ledgers by date (ADR-0006)
   unscreened_playbook_signals: true # show pre-Gate 1 playbook signals as context (L2 only)
+  # Initial playbook versions that trade as L0/L1 without Gate 1 (owner decision,
+  # 2026-10-21). A changed playbook gets a new tag and needs the screen.
+  exempt_playbooks:
+    - vwap_reversion@1.489ebf32
+    - momentum_scalp@1.88b40392
+    - mean_reversion@1.fad55a30
+    - liquidity_sweep@1.0eaca9db
+    - trend_following@1.19635a47
+    - opening_flush@1.c8af2e86
 
 # Market data feed (docs/architecture/overview.md §3.2). Book and ticker frames
 # arrive every 100 ms; a longer silence marks the snapshot stale.

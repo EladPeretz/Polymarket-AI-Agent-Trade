@@ -98,8 +98,9 @@ Each trade has a source:
   and there is a daily cap on L2 trades.
 * `playbook:<id>`: one of the coded playbooks' live setups. Taking the setup as
   it stands is L0; changing its prices within its limits is L1. These use the
-  full budget, but only once that playbook version has passed the Gate 1
-  backtest screen.
+  full budget, but only for a playbook version that has passed the Gate 1
+  backtest screen or that the owner has exempted from it. The briefing lists
+  the versions that may trade as L0/L1.
 
 Until a playbook is screened, its setups appear in snapshots and events marked
 `"screened": false`. Treat them as context. If you want to act on one, propose
