@@ -160,6 +160,7 @@ class SessionEngine:
         symbol = self._by_id.get(ticker.instrument_id)
         if symbol is not None and ticker.mark_price is not None:
             self._execution.update_marks({symbol: ticker.mark_price})
+            self._bars[symbol].add_mark(ticker.mark_price, ticker.timestamp)
 
     # --- Clock ---
 

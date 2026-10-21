@@ -90,6 +90,8 @@ class SessionFeatures:
     opening_range_complete: bool
     # Volume against prior sessions' average, pro rata for the time elapsed.
     relative_volume: Decimal | None
+    # Too few minutes traded: VWAP and the profile are time-weighted instead.
+    volume_sparse: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,18 +194,27 @@ def minute_volatility(bars: Sequence[Bar], *, minimum: int = 10) -> Decimal | No
 
 
 def volume_profile(
-    bars: Sequence[Bar], bucket_size: Decimal, value_area_fraction: Decimal
+    bars: Sequence[Bar],
+    bucket_size: Decimal,
+    value_area_fraction: Decimal,
+    *,
+    by_time: bool = False,
 ) -> VolumeProfile | None:
     """Volume by price bucket (each bar's volume at its average price).
 
+    ``by_time`` weighs every bar as one minute at its typical price instead
+    (time at price), for symbols whose traded volume is too sparse to use.
     The value area grows from the POC one bucket at a time, taking the heavier
-    neighbour, until it holds ``value_area_fraction`` of the volume.
+    neighbour, until it holds ``value_area_fraction`` of the weight.
     """
     if bucket_size <= 0:
         raise ValueError("bucket_size must be positive")
     buckets: dict[int, Decimal] = {}
     for bar in bars:
-        if bar.volume > 0:
+        if by_time:
+            key = int(bar.typical // bucket_size)
+            buckets[key] = buckets.get(key, ZERO) + 1
+        elif bar.volume > 0:
             key = int(bar.average_price // bucket_size)
             buckets[key] = buckets.get(key, ZERO) + bar.volume
     total = sum(buckets.values(), ZERO)
@@ -250,17 +261,18 @@ def session_features(
     if not session:
         return None
     volume = sum((b.volume for b in session), ZERO)
-    notional = sum((b.notional for b in session), ZERO)
-    vwap = notional / volume if volume > 0 else session[-1].close
+    sparse = is_volume_sparse(session, config)
     high = max(max(b.high for b in session), price)
     low = min(min(b.low for b in session), price)
     first = session[0].open
 
     crosses, above, side = 0, 0, 0
     running_volume, running_notional = ZERO, ZERO
+    running_vwap = session[0].close
     for bar in session:
-        running_volume += bar.volume
-        running_notional += bar.notional
+        # Sparse volume: a time-weighted average (each minute at its typical price).
+        running_volume += 1 if sparse else bar.volume
+        running_notional += bar.typical if sparse else bar.notional
         running_vwap = running_notional / running_volume if running_volume > 0 else bar.close
         now_side = (bar.close > running_vwap) - (bar.close < running_vwap)
         if now_side > 0:
@@ -284,10 +296,10 @@ def session_features(
         open=first,
         high=high,
         low=low,
-        vwap=vwap,
+        vwap=running_vwap,
         volume=volume,
         price_vs_open_bp=bp(price - first, first),
-        price_vs_vwap_bp=bp(price - vwap, vwap),
+        price_vs_vwap_bp=bp(price - running_vwap, running_vwap),
         range_bp=bp(span, first),
         efficiency=abs(price - first) / span if span > 0 else ZERO,
         vwap_crosses=crosses,
@@ -296,7 +308,14 @@ def session_features(
         opening_range_low=min((b.low for b in opening), default=None),
         opening_range_complete=now >= opening_end,
         relative_volume=relative,
+        volume_sparse=sparse,
     )
+
+
+def is_volume_sparse(bars: Sequence[Bar], config: FeaturesConfig) -> bool:
+    """Whether too few of ``bars`` traded for volume-weighted features to mean much."""
+    traded = sum(1 for b in bars if b.volume > 0)
+    return traded < len(bars) * config.min_traded_minutes_share
 
 
 def summarize_session(

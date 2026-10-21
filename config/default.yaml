@@ -56,6 +56,7 @@ features:
   trend_efficiency: 0.5             # net move / range for a trend
   max_trend_vwap_crosses: 3
   regime_min_minutes: 15            # no regime label before this
+  min_traded_minutes_share: 0.5     # fewer traded minutes: VWAP and profile time-weighted
 
 # Agent wake-ups besides playbook signals and the check-in (overview §3.4).
 triggers:

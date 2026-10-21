@@ -199,6 +199,10 @@ class FeaturesConfig(_Model):
     max_trend_vwap_crosses: Annotated[int, Field(ge=0, le=50)] = 3
     # No regime label before this much of the session has traded.
     regime_min_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+    # Venue volume can be thin or stale on some symbols. When fewer than this
+    # share of the session's minutes traded, VWAP and the profile are
+    # time-weighted (from mark-filled bars) instead of volume-weighted.
+    min_traded_minutes_share: Annotated[Decimal, Field(ge=0, le=1)] = Decimal("0.5")
 
 
 class TriggersConfig(_Model):
