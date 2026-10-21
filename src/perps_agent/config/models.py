@@ -98,6 +98,16 @@ class AgentConfig(_Model):
     check_in_minutes: Annotated[int, Field(ge=1, le=60)] = 15
     # Kept below the cloud session's per-call time cap (10 minutes).
     next_event_timeout_seconds: Annotated[int, Field(ge=10, le=540)] = 540
+    # Most events one ``next_event`` call returns; the rest wait for the next call.
+    max_events_per_call: Annotated[int, Field(ge=1, le=50)] = 10
+    # The engine serves the agent's tools on this Unix socket (ADR-0011).
+    socket_path: str = "data/agent.sock"
+    # Journals, ledgers and reports by date (ADR-0006); the briefing reads past days.
+    results_dir: str = "results"
+    # Playbooks that have not passed the Gate 1 screen still wake the agent and
+    # appear in snapshots, labelled unscreened; the agent may act on them only as
+    # L2 (discretionary) trades. Owner decision, 2026-10-21.
+    unscreened_playbook_signals: bool = True
 
 
 class MarketDataConfig(_Model):
@@ -225,6 +235,10 @@ class ExecutionConfig(_Model):
     # Exits are reduce-only IOC orders limited this far through the mark, so a
     # thin book cannot fill them at any price.
     exit_slippage_bp: Annotated[Decimal, Field(gt=0, le=500)] = Decimal(50)
+    # Engine-run trailing stops and breakeven moves (ADR-0009): a stop moves at
+    # most once per interval, and only by at least this step.
+    trail_min_interval_seconds: Annotated[int, Field(ge=1, le=300)] = 5
+    trail_min_step_bp: Annotated[Decimal, Field(ge=0, le=100)] = Decimal(2)
 
 
 class LiveConfig(_Model):
@@ -245,6 +259,8 @@ class SymbolConfig(_Model):
     symbol: str
     enabled: bool = True
     autonomy: AutonomyConfig = AutonomyConfig()
+    # Short, factual notes on how the symbol trades, for the agent's briefing.
+    notes: str | None = None
 
     @field_validator("symbol")
     @classmethod

@@ -222,16 +222,54 @@ The agent sizes trades in **risk units, not quantity**. The risk engine converts
 a risk budget plus the stop distance into a quantity, so the agent cannot
 accidentally oversize.
 
-Transport: the tools are exposed to Claude Code as an MCP server, or as a thin CLI
-the session calls. Which one is settled by a Phase 2 spike. Known constraint: a
-single tool call or foreground command in a cloud session has a time cap
-(currently 10 minutes for Bash), so `next_event` timeouts are kept below that. The
-15-minute check-in is an engine-side timer, not a single long wait.
+Transport (ADR-0011): the engine serves the tools on a local Unix socket and the
+agent calls them with `perps-agent agent <tool> '<json>'`, a thin CLI. A single
+foreground command in a cloud session is capped (currently 10 minutes for Bash),
+so `next_event` waits at most 540 s. The 15-minute check-in is an engine-side
+timer, not a single long wait.
 
 Context management: each event carries a compact, self-contained snapshot, so
 the agent does not need to remember the whole morning. A short "session state"
 summary (positions, today's trades, lessons noted) is included with every event,
 so context compaction during the 3-hour run loses nothing important.
+
+Implementation (`agent/`, WP10).
+
+* **`AgentBridge`** serves the tools above (plus `get_briefing`, and `journal`
+  with `stand_aside`). Each call is validated by its schema
+  (`agent/schemas.py`), journaled as a decision (ADR-0010) and carried out
+  through the risk engine and execution. `next_event` returns every queued
+  event (up to `agent.max_events_per_call`), each involved symbol's snapshot
+  (market, features, regime, volume profile, levels, ticker profile, setups,
+  position) and the session state (time, equity, day PnL, loss room, budgets,
+  limits, positions, working entries, today's closed trades).
+* **Proposals** name a source, not a level. `discretionary` is L2. A
+  `playbook:<id>` proposal must match a live setup of that playbook and its
+  version must have passed Gate 1; taking the setup unchanged is L0, changing
+  its prices L1, never above the setup's size cap. Until WP13 no playbook is
+  screened, so playbook setups are shown labelled `"screened": false` and the
+  agent may act on them only as L2 (owner decision 2026-10-21,
+  `agent.unscreened_playbook_signals`).
+* **Events from execution:** the bridge reads new ledger events and tells the
+  agent when an entry or add filled, partly filled or ended unfilled, when a
+  stop or target triggered, when a position closed (net PnL, R, reason), and
+  when entries are blocked or the daily loss limit is reached. Exit-plan
+  actions are reported as position events.
+* **Prompts:** `agent/prompts/system.md` is the fixed system prompt: role,
+  scenario-based decision process and the owner's trading style (zero-trade
+  days at most about weekly, size by conviction and context, limit orders by
+  default, market for scalps and momentum, no stopping except the daily loss
+  limit). The **briefing** is built each morning: window, symbols with their
+  notes (`notes` in `config/symbols/*.yaml`), limits, Gate 1 status and how many
+  of the last five sessions had no trade. Lessons and calibration join it in
+  WP14. `perps-agent prompt` prints both.
+* **Session engine** (`app/session.py`): `perps-agent run` loads history and
+  bars, starts the feed, simulator, execution, exit plans, trigger detector,
+  journal and ledger (`results/<date>/`), serves the bridge, and runs until the
+  window has closed and the book is flat. Until the guardian (WP11) it closes
+  everything itself at the window end.
+* `bridge.last_call_at` is the agent's last tool call, for the guardian's
+  liveness check (WP11).
 
 ### 3.6 Autonomy model: playbooks plus bounded discretion
 
@@ -373,8 +411,15 @@ everything in the ledger.
   size the risk engine cut.
 * Venue reports use the simulator's event vocabulary; orders the venue sends
   itself (TP/SL closes, liquidations) are registered from their trigger or fill.
-* Not yet: engine-run trailing rules and exit plans (ADR-0009, with WP9/WP10),
-  the non-atomic stop replacement watch and the dead man's switch (live only).
+* **Exit plans** (`execution/plans.py`, WP10): `ExitPlanManager` evaluates each
+  position's plan on every feature update: scale-outs at R multiples (once
+  each), a breakeven stop (entry plus round-trip costs) and one trailing rule
+  (fixed bp, × 15-minute range, swing low/high of the last N bars, or VWAP),
+  optionally from a profit in R. R is measured from the entry to the approved
+  stop. Stop moves go through `update_protection`, so they only tighten, at
+  most once per `trail_min_interval_seconds` and by at least `trail_min_step_bp`.
+* Not yet: the non-atomic stop replacement watch and the dead man's switch
+  (live only).
 
 ### 3.9 Paper simulator (`sim/`)
 

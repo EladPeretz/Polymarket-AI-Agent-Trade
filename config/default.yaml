@@ -24,9 +24,14 @@ session:
   # Unscheduled NYSE closures not yet in the calendar, e.g. ["2026-01-09"].
   extra_closures: []
 
+# Agent bridge (docs/architecture/overview.md §3.5, ADR-0011).
 agent:
   check_in_minutes: 15
-  next_event_timeout_seconds: 540
+  next_event_timeout_seconds: 540   # below the cloud session's 10-minute call cap
+  max_events_per_call: 10
+  socket_path: data/agent.sock      # the engine serves the agent's tools here
+  results_dir: results              # journals and ledgers by date (ADR-0006)
+  unscreened_playbook_signals: true # show pre-Gate 1 playbook signals as context (L2 only)
 
 # Market data feed (docs/architecture/overview.md §3.2). Book and ticker frames
 # arrive every 100 ms; a longer silence marks the snapshot stale.
@@ -93,6 +98,8 @@ sim:
 execution:
   entry_timeout_seconds: 120        # cancel a limit entry still working after this
   exit_slippage_bp: 50              # exits are reduce-only IOC limited this far through mark
+  trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
+  trail_min_step_bp: 2              # ... and only by at least this much
 
 # Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
 live:

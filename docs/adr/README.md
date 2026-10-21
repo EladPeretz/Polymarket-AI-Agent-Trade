@@ -16,6 +16,7 @@ ADR that supersedes the old one.
 | [0008](0008-short-window-regime-aware-evaluation.md) | Short-window, regime-aware strategy evaluation with frequent iteration | Accepted |
 | [0009](0009-position-management-and-exit-plans.md) | Agent-managed positions: adding, exit plans, trailing stops and runners | Accepted |
 | [0010](0010-decision-process-and-learning-loop.md) | Scenario-based decisions and an agent-owned learning loop | Accepted |
+| [0011](0011-agent-tools-over-cli-and-local-socket.md) | Agent tools as a CLI over a local socket, not an MCP server | Proposed |
 
 Template: copy an existing ADR and keep the headings *Context*, *Decision*,
 *Consequences*.

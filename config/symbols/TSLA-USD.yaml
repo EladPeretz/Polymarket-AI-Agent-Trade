@@ -6,3 +6,7 @@ autonomy:
   L0: true
   L1: true
   L2: true
+
+# Briefing notes for the agent (owner inputs, 2026-10-20).
+notes: >-
+  High volatility, news- and sentiment-driven, often trends hard.
