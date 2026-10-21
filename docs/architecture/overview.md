@@ -153,6 +153,36 @@ known dev/CI environments.
   * a scheduled **check-in every 15 minutes**,
   * session milestones (open, entry cutoff, window close).
 
+Implementation (`strategy/`, WP9). Definitions, defaults and bounds of every
+playbook are in [playbooks.md](playbooks.md).
+
+* **Bars:** everything is computed from 1-minute bars (`MinuteBars`), seeded from
+  REST 1-minute candles and extended by the live trades stream. Perps trade 24/7,
+  so the overnight bars give the 15- and 60-minute ranges at 09:30.
+* **`build_features`** returns a `FeatureSnapshot`: volatility (15- and 60-minute
+  high-low ranges, 1-minute log-return volatility, expected move to the window
+  end `σ₁ₘ × √minutes left`), the regular session so far (open, high, low, VWAP,
+  price against open and VWAP, VWAP crosses, efficiency, opening range, relative
+  volume), the session volume profile (POC, value area), key levels (prior
+  session high, low, close and POC; today's opening range), the ticker profile
+  over `features.history_sessions` prior sessions (1- and 5-session returns,
+  usual range, trending/consolidating character) and the regime labels.
+* **Regime** (`classify`): volatility *expansion* / *normal* / *compressed* from
+  the session range against the usual range scaled by `√(elapsed / session)`;
+  structure *trend_up* / *trend_down* / *rotation* from efficiency and VWAP
+  crosses. Unknown labels stay `None` (before `regime_min_minutes`, or without
+  history), and a playbook that requires a label stays quiet until it is known.
+* **Playbooks** return a `Setup` (direction, entry, stop, target, time stop,
+  conviction, size cap, reasons). Stops are at least the risk engine's
+  volatility floor; targets are measured after costs, as the risk engine does.
+  Parameters are pydantic models whose limits are the tuning bounds (ADR-0010);
+  `load_playbooks(overrides)` refuses values outside them. Tags are
+  `<id>@<logic version>.<parameter hash>`.
+* **`TriggerDetector`** is fed features, setups, the position and the clock. It
+  emits playbook (edge-triggered), large-move, position, check-in and session
+  triggers. Fills, rejections and risk events reach the agent from execution
+  through the bridge (WP10).
+
 ### 3.5 Agent bridge (`agent/`)
 
 The agent is Claude in a Claude Code session. It never talks to the venue; it
@@ -234,8 +264,11 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
 1. Trading window open and before the entry cutoff; symbol enabled; instrument
    not `close_only`.
 2. Market snapshot fresh; spread ≤ max; top-of-book depth ≥ min.
-3. Stop present, on the correct side, and at least a minimum distance away
-   (noise floor); target, if present, on the correct side and worth at least
+3. Stop present, on the correct side, and at least the **volatility stop floor**
+   away: `stop_floor_range_multiple` (1) × the symbol's recent 15-minute
+   high-low range, never closer than `min_stop_distance_bp` (20 bp). Without a
+   15-minute range the intent is rejected. The agent may set wider stops,
+   never closer ones. Target, if present, on the correct side and worth at least
    `min_reward_risk` (2R) after costs, measured from the final entry price.
    A trade without a target is allowed (a runner managed by its stop). The rule
    applies at entry; targets may still be moved afterwards.
@@ -269,10 +302,11 @@ gets an immediate protective stop or is closed. The 12:30 close-out applies to
 runners with no exceptions.
 
 Implementation (`risk/`, WP6). `RiskEngine.evaluate(intent, instrument,
-snapshot, state, now)` returns a `RiskVerdict`: approved, resized or rejected,
+snapshot, state, range_15m, now)` returns a `RiskVerdict`: approved, resized or rejected,
 with every failed check listed at once, and the exact `OrderRequest` (fresh
 32-hex client order id) that execution may send. `evaluate_add` applies rule 10
-and `check_stop_change` rule 11. The engine refuses to construct while any risk
+and `check_stop_change` rule 11. `range_15m` comes from the engine's features
+(WP9), never from the agent; `min_stop_distance` exposes the floor. The engine refuses to construct while any risk
 value is `null`.
 
 * The budget is `per_trade_risk_fraction` of the lower of current and

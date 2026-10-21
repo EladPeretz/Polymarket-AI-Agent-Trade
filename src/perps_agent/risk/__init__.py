@@ -14,6 +14,7 @@ from perps_agent.risk.sizing import (
     loss_per_unit,
     max_leverage_for_stop,
     quantity_for_risk,
+    stop_floor,
 )
 from perps_agent.risk.state import PositionRisk, RiskState
 
@@ -33,4 +34,5 @@ __all__ = [
     "loss_per_unit",
     "max_leverage_for_stop",
     "quantity_for_risk",
+    "stop_floor",
 ]
