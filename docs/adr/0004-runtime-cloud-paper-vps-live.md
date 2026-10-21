@@ -12,7 +12,7 @@ The owner prefers Claude Code as the agent runtime.
 ## Decision
 
 * **Paper:** a scheduled task starts a Claude Code cloud session each NYSE trading
-  day around 09:15 New York time. The session runs the engine in `paper` mode and
+  day around 09:10 New York time. The session runs the engine in `paper` mode and
   acts as the agent. No credentials are needed.
 * **Live:** the same repo, engine and Claude Code agent run on a VPS in a
   permitted jurisdiction, started by the server's scheduler. Moving there is a
@@ -30,3 +30,6 @@ The owner prefers Claude Code as the agent runtime.
   subscription fits its usage terms and limits (else an API key). The design
   survives an agent outage (ADR-0002).
 * Live mode adds VPS operations: deploys, secrets, monitoring.
+* WP12 (2026-10-21): the schedule, runbook and start/finish script are in
+  `docs/operations/`. The first full dry run of a scheduled session is the first
+  test of session duration and tool-call caps; its findings are recorded there.

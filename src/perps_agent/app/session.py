@@ -334,18 +334,24 @@ async def run_paper_session(
     playbooks: Sequence[Playbook[Any]],
     secrets: Sequence[str] = (),
     stop: asyncio.Event | None = None,
+    calendar: TradingCalendar | None = None,
 ) -> int:
-    """Run today's paper session until the window has closed and the book is flat."""
+    """Run today's paper session until the window has closed and the book is flat.
+
+    ``calendar`` replaces the NYSE trading calendar, for rehearsals
+    (:mod:`perps_agent.app.rehearsal`).
+    """
     if config.mode is not Mode.PAPER:
         raise ValueError(f"run_paper_session runs paper mode only, not {config.mode}")
     stop = stop or asyncio.Event()
-    calendar = TradingCalendar(config.session)
+    calendar = calendar or TradingCalendar(config.session)
     now = utc_now()
-    day = now.astimezone(config.session.zone).date()
-    window = calendar.trading_window(day)
+    window = calendar.window_at(now)
     if window is None:
+        day = now.astimezone(config.session.zone).date()
         log.info("not a trading day", extra={"day": day.isoformat()})
         return 3
+    day = window.date
     paths = session_paths(config, day)
     if paths.ledger.exists():
         raise FileExistsError(

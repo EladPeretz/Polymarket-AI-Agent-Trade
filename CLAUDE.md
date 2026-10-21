@@ -9,6 +9,13 @@ LLM-agent trading bot for Polymarket Perps stock perpetuals. Start with
 `README.md`, then `docs/architecture/overview.md`, `docs/adr/` and
 `docs/phase-0/venue-research.md`.
 
+## Daily paper-trading sessions
+
+A scheduled session follows `docs/operations/daily-session.md` from start to
+end without asking questions. Its only allowed push is `paper-results`, through
+`scripts/paper_session.sh finish`. Setup and the scheduled task's prompt are in
+`docs/operations/scheduling.md`.
+
 ## Safety rules (non-negotiable)
 
 * **Never place, modify or cancel real orders** from a development or cloud
