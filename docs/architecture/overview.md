@@ -613,8 +613,8 @@ Implementation (`report/`, `app/results.py`, WP11).
 
 | Time (New York) | Step |
 | - | - |
-| 09:15 | Scheduled task starts a cloud session. The session installs deps, loads config, checks the calendar (exits on non-trading days) and starts the engine in the background. |
-| 09:15–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing including relevant lessons and its calibration stats. |
+| 09:10 | Scheduled task starts a cloud session (`docs/operations/scheduling.md`). The session runs `scripts/paper_session.sh start`: installs deps, runs `perps-agent preflight` (exits on non-trading days), fetches recent results and starts the engine in the background (`docs/operations/daily-session.md`). |
+| 09:10–09:30 | Engine connects feeds, builds pre-open context (prior close, overnight move, funding). Agent receives a `session_start` briefing including relevant lessons and its calibration stats. |
 | 09:30–12:15 | Agent loop: `next_event` → reason → act or pass. Engine runs triggers, risk, simulator and guardian continuously. |
 | 12:15 | Entry cutoff: only exits and protection adjustments allowed. |
 | 12:30–12:35 | Guardian closes everything. |
@@ -694,7 +694,9 @@ scripts/        one-off tools (e.g. connectivity check)
    range, `min_stop_distance_bp` as the absolute floor).
 10. Agent bridge (tools, `TradeIntent`, prompts), including the MCP-vs-CLI transport spike.
 11. Guardian + daily report + results branch publishing.
-12. Daily scheduling in Claude Code cloud + a dry-run session.
+12. Daily scheduling in Claude Code cloud + a dry-run session: `perps-agent
+    preflight`, `perps-agent run --rehearsal`, `scripts/paper_session.sh`, the
+    session runbook and the scheduled task (`docs/operations/`).
 13. Backtest runner for playbooks.
 14. Learning loop (§3.13): lessons notebook, daily and weekly review, briefing,
     agent-state store with its bounds defined in `main`, and the `simulate` tool.

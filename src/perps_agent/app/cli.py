@@ -12,6 +12,8 @@ from pathlib import Path
 from perps_agent import __version__
 from perps_agent.agent import TransportError, system_prompt
 from perps_agent.agent import request as agent_request
+from perps_agent.app.preflight import Status, run_preflight
+from perps_agent.app.rehearsal import RehearsalCalendar, rehearsal_config, rehearsal_window
 from perps_agent.app.results import PublishError, fetch_results, local_days, publish_results
 from perps_agent.app.session import briefing_for, run_paper_session
 from perps_agent.calendar import CalendarError, TradingCalendar
@@ -70,11 +72,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="exchange date, YYYY-MM-DD (default: today in New York)",
     )
 
+    preflight = commands.add_parser(
+        "preflight",
+        help="checks before the daily session (exit 0 go, 1 fail, 3 nothing to do today)",
+    )
+    preflight.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
     run = commands.add_parser(
         "run",
         help="run today's paper session: engine, simulator and the agent's tool server",
     )
     run.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    run.add_argument(
+        "--rehearsal",
+        type=int,
+        metavar="MINUTES",
+        help="rehearse on a window of MINUTES starting now, results under data/rehearsals/",
+    )
 
     agent = commands.add_parser(
         "agent",
@@ -134,8 +148,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _fetch_results(args.config, args.days)
     if args.command == "kill":
         return _kill(args.config, args.reason, clear=args.clear)
+    if args.command == "preflight":
+        return _preflight(args.config)
     if args.command == "run":
-        return _run(args.config)
+        return _run(args.config, args.rehearsal)
     if args.command == "agent":
         return _agent(args.config, args.tool, args.args)
     if args.command == "prompt":
@@ -252,21 +268,68 @@ def _calendar(path: Path, day: date | None) -> int:
     return 0 if window is not None else EXIT_NOT_TRADING_DAY
 
 
-def _run(path: Path) -> int:
+def _preflight(path: Path) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(
+            json.dumps(
+                {
+                    "status": "fail",
+                    "checks": [{"name": "config", "status": "fail", "detail": str(error)}],
+                },
+                indent=2,
+            )
+        )
+        return 1
+    result = run_preflight(config, load_secrets(), utc_now())
+    print(json.dumps(result.as_dict(), indent=2))
+    if result.status is Status.FAIL:
+        return 1
+    if result.status is Status.SKIP:
+        return EXIT_NOT_TRADING_DAY
+    return 0
+
+
+def _run(path: Path, rehearsal_minutes: int | None = None) -> int:
     """Run today's paper session. Live mode is not available (no live gateway yet)."""
+    calendar: TradingCalendar | None = None
     try:
         config = load_config(path)
         secrets = load_secrets()
         if config.mode is not Mode.PAPER:
             raise ConfigError(f"run supports paper mode only, not {config.mode.value}")
         require_ready(config, secrets)
-    except ConfigError as error:
+        if rehearsal_minutes is not None:
+            now = utc_now()
+            calendar = RehearsalCalendar(config.session, rehearsal_window(now, rehearsal_minutes))
+            config = rehearsal_config(config, now)
+    except (ConfigError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     configure_logging(secrets=secrets.secret_values())
+    if isinstance(calendar, RehearsalCalendar):
+        window = calendar.window
+        print(
+            json.dumps(
+                {
+                    "rehearsal": True,
+                    "results_dir": config.agent.results_dir,
+                    "window_start": window.start.isoformat(),
+                    "entry_cutoff": window.entry_cutoff.isoformat(),
+                    "window_end": window.end.isoformat(),
+                }
+            ),
+            flush=True,
+        )
     try:
         return asyncio.run(
-            run_paper_session(config, playbooks=load_playbooks(), secrets=secrets.secret_values())
+            run_paper_session(
+                config,
+                playbooks=load_playbooks(),
+                secrets=secrets.secret_values(),
+                calendar=calendar,
+            )
         )
     except (VenueError, FileExistsError) as error:
         logging.getLogger(__name__).error("session failed", extra={"error": str(error)})

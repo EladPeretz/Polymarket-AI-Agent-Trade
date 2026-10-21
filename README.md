@@ -73,6 +73,17 @@ guardian's kill switch stops a running session:
 .venv/bin/perps-agent kill --clear               # remove the switch before the next session
 ```
 
+The daily scheduled session (WP12) follows
+[`docs/operations/daily-session.md`](docs/operations/daily-session.md); setup is in
+[`docs/operations/scheduling.md`](docs/operations/scheduling.md):
+
+```bash
+.venv/bin/perps-agent preflight               # go / no-go before the session (exit 3: nothing today)
+scripts/paper_session.sh start                # install, preflight, fetch results, start the engine
+scripts/paper_session.sh finish               # wait for the engine to end, publish the results
+.venv/bin/perps-agent run --rehearsal 15      # the full session on a 15-minute window starting now
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

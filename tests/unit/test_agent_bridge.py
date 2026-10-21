@@ -210,6 +210,23 @@ def test_next_event_wakes_when_an_event_arrives():
     assert answer["events"][0]["kind"] == "check_in"
 
 
+def test_ending_the_session_releases_a_waiting_next_event():
+    desk = AgentDesk()
+
+    async def scenario() -> tuple[dict, dict]:
+        waiting = asyncio.create_task(desk.bridge.call("next_event", {"timeout_seconds": 30}))
+        await asyncio.sleep(0.01)
+        desk.bridge.end_session()
+        first = await asyncio.wait_for(waiting, 2)
+        # Later calls no longer wait for their timeout either.
+        later = await asyncio.wait_for(desk.bridge.call("next_event", {"timeout_seconds": 30}), 2)
+        return first, later
+
+    first, later = desk.run(scenario())
+    assert [e["key"] for e in first["events"]] == ["session:ended"]
+    assert later["events"] == []
+
+
 def test_decision_answering_an_event_is_filed_against_it():
     desk = AgentDesk()
     desk.market(0)

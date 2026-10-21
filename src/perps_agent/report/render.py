@@ -57,7 +57,7 @@ def render_markdown(report: DailyReport) -> str:
             "",
             "**Open at the end of the session:** "
             + ", ".join(
-                f"{p.symbol} {p.direction} {p.quantity} @ {p.average_entry}"
+                f"{p.symbol} {p.direction} {p.quantity} @ {_price(p.average_entry)}"
                 for p in report.open_at_end
             ),
         ]
@@ -76,8 +76,8 @@ def render_markdown(report: DailyReport) -> str:
                     str(t.direction),
                     t.level,
                     t.source,
-                    str(t.average_entry),
-                    str(t.average_exit),
+                    _price(t.average_entry),
+                    _price(t.average_exit),
                     _money(t.net_pnl, signed=True),
                     _r(t.r_multiple),
                     _cell(t.exit_reason or ""),
@@ -179,6 +179,11 @@ def _cell(text: str) -> str:
 
 def _time(at: datetime) -> str:
     return at.astimezone(_ZONE).strftime("%H:%M:%S")
+
+
+def _price(value: Decimal) -> str:
+    """Average prices of several fills, to 4 decimal places without trailing zeros."""
+    return format(value.quantize(Decimal("0.0001")).normalize(), "f")
 
 
 def _money(value: Decimal | None, *, signed: bool = False) -> str:
