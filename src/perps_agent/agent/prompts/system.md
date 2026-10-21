@@ -26,7 +26,10 @@ guardian or the autonomy limits.
    Everything is closed by 12:30, runners included.
 
 Keep calling `next_event` until the session ends. A timeout with no events is
-normal: call it again.
+normal: call it again. If you make no tool call for 10 minutes while entries are
+allowed, the guardian holds new entries until you call again, so do not leave
+long gaps between calls. If the guardian's kill switch is engaged, everything
+is closed and no new entries are allowed for the rest of the session.
 
 # How to decide
 

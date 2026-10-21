@@ -241,6 +241,44 @@ class ExecutionConfig(_Model):
     trail_min_step_bp: Annotated[Decimal, Field(ge=0, le=100)] = Decimal(2)
 
 
+class GuardianConfig(_Model):
+    """The guardian (overview §3.10): window close-out, kill switch, liveness, incidents.
+
+    Not learnable (ADR-0010).
+    """
+
+    # Engaged for the whole session when true, or when ``kill_switch_file``
+    # exists: everything is closed and no new entries are allowed.
+    kill_switch: bool = False
+    kill_switch_file: str = "data/KILL_SWITCH"
+    # New entries are held while the agent has made no tool call for this long
+    # (a call in progress, such as a waiting ``next_event``, counts as alive).
+    agent_timeout_seconds: Annotated[int, Field(ge=60, le=3_600)] = 600
+    # A symbol whose data stays stale this long inside the window is an incident.
+    stale_incident_seconds: Annotated[int, Field(ge=1, le=3_600)] = 30
+    # How often ledger and venue positions are compared; a difference seen on
+    # two checks in a row holds new entries for the rest of the session.
+    reconcile_interval_seconds: Annotated[int, Field(ge=5, le=3_600)] = 60
+    # Equity is sampled this often for the daily report's drawdown.
+    equity_sample_seconds: Annotated[int, Field(ge=5, le=3_600)] = 60
+
+
+class ResultsConfig(_Model):
+    """Publishing ``results/<date>/`` to the results branch (ADR-0006)."""
+
+    branch: str = "paper-results"
+    remote: str = "origin"
+    # Push attempts, with 2, 4, 8 ... seconds between them.
+    push_attempts: Annotated[int, Field(ge=1, le=8)] = 4
+
+    @field_validator("branch")
+    @classmethod
+    def _not_main(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", value) or value in ("main", "master"):
+            raise ValueError(f"results branch must be a dedicated branch name, got {value!r}")
+        return value
+
+
 class LiveConfig(_Model):
     """Live trading gate (ADR-0004). Off unless explicitly enabled and attested."""
 
@@ -281,6 +319,8 @@ class AppConfig(_Model):
     risk: RiskConfig = RiskConfig()
     sim: SimConfig = SimConfig()
     execution: ExecutionConfig = ExecutionConfig()
+    guardian: GuardianConfig = GuardianConfig()
+    results: ResultsConfig = ResultsConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
 

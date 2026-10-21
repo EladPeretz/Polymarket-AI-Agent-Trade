@@ -12,6 +12,7 @@ from pathlib import Path
 from perps_agent import __version__
 from perps_agent.agent import TransportError, system_prompt
 from perps_agent.agent import request as agent_request
+from perps_agent.app.results import PublishError, fetch_results, local_days, publish_results
 from perps_agent.app.session import briefing_for, run_paper_session
 from perps_agent.calendar import CalendarError, TradingCalendar
 from perps_agent.clock import utc_now
@@ -25,8 +26,16 @@ from perps_agent.config import (
     readiness_problems,
     require_ready,
 )
+from perps_agent.guardian import (
+    INCIDENTS_FILE,
+    Incident,
+    IncidentKind,
+    Severity,
+    append_incident,
+)
 from perps_agent.log import configure_logging
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
+from perps_agent.report import write_report
 from perps_agent.strategy.playbooks import load_playbooks
 from perps_agent.venue import InstrumentRegistry, VenueError, create_market_data
 
@@ -83,7 +92,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     prompt.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     prompt.add_argument("--date", type=date.fromisoformat, help="exchange date, YYYY-MM-DD")
 
+    report = commands.add_parser(
+        "report", help="build a day's report (report.md, report.json) from results/<date>/"
+    )
+    report.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    report.add_argument("--date", type=date.fromisoformat, help="YYYY-MM-DD (default: today)")
+
+    publish = commands.add_parser(
+        "publish",
+        help="commit results/<date>/ to the results branch and push it (ADR-0006)",
+    )
+    publish.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    publish.add_argument(
+        "--date",
+        type=date.fromisoformat,
+        help="publish one day (default: every local day; days already published add nothing)",
+    )
+
+    fetch = commands.add_parser(
+        "fetch-results", help="copy recent days from the results branch into results/"
+    )
+    fetch.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    fetch.add_argument("--days", type=int, default=10, help="newest N days on the branch")
+
+    kill = commands.add_parser(
+        "kill",
+        help="engage the guardian's kill switch: close everything, no new entries this session",
+    )
+    kill.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    kill.add_argument("--reason", default="", help="why, recorded in the incident")
+    kill.add_argument(
+        "--clear", action="store_true", help="remove the kill switch file (for the next session)"
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "report":
+        return _report(args.config, args.date)
+    if args.command == "publish":
+        return _publish(args.config, args.date)
+    if args.command == "fetch-results":
+        return _fetch_results(args.config, args.days)
+    if args.command == "kill":
+        return _kill(args.config, args.reason, clear=args.clear)
     if args.command == "run":
         return _run(args.config)
     if args.command == "agent":
@@ -275,6 +325,100 @@ def _prompt(path: Path, day: date | None) -> int:
         return 1
     print(system_prompt())
     print(briefing)
+    return 0
+
+
+def _today(config: AppConfig) -> date:
+    return utc_now().astimezone(config.session.zone).date()
+
+
+def _report(path: Path, day: date | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    day = day or _today(config)
+    day_dir = Path(config.agent.results_dir) / day.isoformat()
+    if not day_dir.is_dir():
+        print(f"error: {day_dir} does not exist", file=sys.stderr)
+        return 1
+    write_report(day_dir)
+    print((day_dir / "report.md").read_text(encoding="utf-8"))
+    return 0
+
+
+def _publish(path: Path, day: date | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    secrets = load_secrets()
+    configure_logging(secrets=secrets.secret_values())
+    results = Path(config.agent.results_dir)
+    days = [day] if day is not None else local_days(results)
+    try:
+        published = publish_results(
+            results, days, config=config.results, secrets=secrets.secret_values()
+        )
+    except PublishError as error:
+        logging.getLogger(__name__).error("publish failed", extra={"error": str(error)})
+        # Recorded with the newest day, so the next publish carries the incident too.
+        if days and (results / max(days).isoformat()).is_dir():
+            append_incident(
+                results / max(days).isoformat() / INCIDENTS_FILE,
+                Incident(
+                    at=utc_now(),
+                    kind=IncidentKind.PUBLISH_FAILED,
+                    severity=Severity.CRITICAL,
+                    detail=f"results not published to {config.results.branch}: {error}",
+                ),
+            )
+        return 1
+    print(
+        json.dumps(
+            {
+                "branch": config.results.branch,
+                "days": [d.isoformat() for d in published.days],
+                "commit": published.commit,
+                "attempts": published.attempts,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _fetch_results(path: Path, days: int) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        fetched = fetch_results(Path(config.agent.results_dir), config=config.results, days=days)
+    except PublishError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps({"fetched": [d.isoformat() for d in fetched]}, indent=2))
+    return 0
+
+
+def _kill(path: Path, reason: str, *, clear: bool) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    switch = Path(config.guardian.kill_switch_file)
+    if clear:
+        switch.unlink(missing_ok=True)
+        print(f"kill switch file removed: {switch}")
+        return 0
+    switch.parent.mkdir(parents=True, exist_ok=True)
+    switch.write_text(f"{utc_now().isoformat()} {reason}".strip() + "\n", encoding="utf-8")
+    print(f"kill switch engaged: {switch} (a running session acts on its next check)")
     return 0
 
 

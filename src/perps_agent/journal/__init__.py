@@ -25,6 +25,7 @@ from perps_agent.journal.journal import (
     Journal,
     JournalError,
     snapshot_ref,
+    trade_outcome,
 )
 from perps_agent.journal.store import (
     JOURNAL_FILE,
@@ -62,4 +63,5 @@ __all__ = [
     "load_journal",
     "load_journals",
     "snapshot_ref",
+    "trade_outcome",
 ]

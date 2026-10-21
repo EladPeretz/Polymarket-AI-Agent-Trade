@@ -12,9 +12,10 @@ from perps_agent.ledger.events import (
     ProtectionChanged,
 )
 from perps_agent.ledger.ledger import Ledger, LedgerError, LedgerOrder, LedgerPosition
-from perps_agent.ledger.store import JsonlLedgerSink, load_events
+from perps_agent.ledger.store import LEDGER_FILE, JsonlLedgerSink, load_events
 
 __all__ = [
+    "LEDGER_FILE",
     "DayStarted",
     "FillBooked",
     "FundingBooked",

@@ -116,20 +116,17 @@ def test_exit_plan_actions_reach_the_agent():
     assert plan_events and "stop moved" in plan_events[0]["detail"]
 
 
-def test_everything_is_closed_at_the_window_end():
+def test_the_engine_leaves_the_window_close_to_the_guardian():
     desk = AgentDesk()
     engine = _engine(desk)
     desk.market(0)
     desk.enter(intent(entry=None, stop="199", level=AutonomyLevel.L2))
     desk.market(300)
-    assert not engine.flat
     end = WINDOW.end
     desk.clock.now = end
     desk.run(engine.step(end))
     desk.market((end - NOW) // timedelta(milliseconds=1) + 300)
-    assert engine.flat
-    position = desk.ledger.positions[0]
-    assert position.closed_at is not None
+    assert not engine.flat
 
 
 def test_session_paths(tmp_path):
@@ -139,9 +136,61 @@ def test_session_paths(tmp_path):
     paths = session_paths(config, NOW.date())
     assert paths.journal == tmp_path / "2026-10-20" / "journal.jsonl"
     assert paths.ledger == tmp_path / "2026-10-20" / "ledger.jsonl"
+    assert paths.incidents == tmp_path / "2026-10-20" / "incidents.jsonl"
+    assert paths.equity == tmp_path / "2026-10-20" / "equity.jsonl"
+    assert paths.agent_events == tmp_path / "2026-10-20" / "agent_events.jsonl"
 
 
 def test_execution_config_defaults_for_trailing():
     config = ExecutionConfig()
     assert config.trail_min_interval_seconds == 5 and config.trail_min_step_bp == D(2)
     assert TriggerKind.POSITION == "position"
+
+
+def test_equity_sampler_samples_on_its_interval():
+    from perps_agent.app.session import EquitySampler
+
+    desk = AgentDesk()
+    samples = []
+    sampler = EquitySampler(desk.execution, samples.append, timedelta(seconds=60))
+    desk.run(sampler.sample(NOW))
+    desk.run(sampler.sample(NOW + timedelta(seconds=30)))
+    desk.run(sampler.sample(NOW + timedelta(seconds=60)))
+    desk.run(sampler.sample(NOW + timedelta(seconds=61), force=True))
+    assert len(samples) == 3
+    assert samples[0].equity == D(500) and samples[0].open_positions == 0
+
+
+def test_the_loop_survives_a_failing_step_and_still_runs_the_guardian():
+    import asyncio
+
+    from perps_agent.app.session import _loop
+
+    class Broken:
+        async def pump(self) -> None:
+            pass
+
+        async def step(self, now) -> None:
+            raise RuntimeError("feature bug")
+
+    class Watch:
+        def __init__(self) -> None:
+            self.errors: list[str] = []
+            self.checks = 0
+
+        def record_error(self, where, error, now=None) -> None:
+            self.errors.append(f"{where}: {error}")
+
+        async def check(self, now) -> None:
+            self.checks += 1
+
+        def session_over(self, now) -> bool:
+            return self.checks >= 1
+
+    class NoSamples:
+        async def sample(self, now, *, force=False) -> None:
+            pass
+
+    watch = Watch()
+    asyncio.run(_loop(Broken(), watch, NoSamples(), asyncio.Event()))  # type: ignore[arg-type]
+    assert watch.errors == ["engine step: feature bug"] and watch.checks == 1

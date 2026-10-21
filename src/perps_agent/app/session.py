@@ -8,13 +8,18 @@ the live loop does:
   builder and the marks.
 * :meth:`SessionEngine.step`: features for every symbol, playbook setups, the
   trigger detector, the exit plans, execution timers and the bridge's ledger
-  events. From the window end it closes everything that is still open; the
-  guardian (WP11) takes that over with its retries, alerts and kill switch.
+  events.
+
+The window close-out, kill switch and liveness checks are the guardian's
+(:mod:`perps_agent.guardian`), which the session loop runs after every step,
+separately, so a failing step never stops it.
 
 It is also the bridge's :class:`~perps_agent.agent.MarketView`.
 
 :func:`run_paper_session` wires it to the live feed and serves the bridge on
-the agent socket for one trading day.
+the agent socket for one trading day. At the end it records the trade outcomes
+and writes the daily report (:mod:`perps_agent.report`) into ``results/<date>/``;
+``perps-agent publish`` then commits that directory to the results branch.
 """
 
 import asyncio
@@ -26,14 +31,17 @@ from pathlib import Path
 from typing import Any
 
 from perps_agent.agent import AgentBridge, BridgeServer, build_briefing, recent_activity
+from perps_agent.agent.latency import AGENT_EVENTS_FILE, JsonlLatencySink
 from perps_agent.calendar import TradingCalendar, TradingWindow
 from perps_agent.clock import to_utc, utc_now
 from perps_agent.config.models import AppConfig, Mode
 from perps_agent.execution import ExecutionEngine, SimBackend
 from perps_agent.execution.plans import ExitPlanManager
+from perps_agent.guardian import INCIDENTS_FILE, Guardian, IncidentLog, JsonlIncidentSink
 from perps_agent.journal import Journal, JsonlJournalSink, TriggerKind, journal_path
-from perps_agent.ledger import JsonlLedgerSink, Ledger
+from perps_agent.ledger import LEDGER_FILE, JsonlLedgerSink, Ledger
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
+from perps_agent.report import EQUITY_FILE, EquitySample, JsonlEquitySink, write_report
 from perps_agent.risk import FeeRates, RiskEngine
 from perps_agent.sim import PaperSimulator
 from perps_agent.strategy import (
@@ -62,7 +70,6 @@ from perps_agent.venue.models import MarketEvent
 
 log = logging.getLogger(__name__)
 
-LEDGER_FILE = "ledger.jsonl"
 # Market events are applied this often; features and triggers every step.
 PUMP_INTERVAL = timedelta(milliseconds=100)
 STEP_INTERVAL = timedelta(seconds=1)
@@ -182,10 +189,6 @@ class SessionEngine:
                     )
         if bridge is not None:
             bridge.push(self._detector.on_clock(now))
-        if window is not None and now >= window.end:
-            # Stopgap until the guardian (WP11): flat at the window end.
-            if self._execution.ledger.open_positions or self._execution.ledger.live_orders():
-                await self._execution.close_all("window close")
         await self._execution.tick(now)
         await self._execution.on_events(self._sim.drain())
         for bars in self._bars.values():
@@ -252,6 +255,22 @@ class SessionPaths:
     journal: Path
     socket: Path
 
+    @property
+    def day_dir(self) -> Path:
+        return self.journal.parent
+
+    @property
+    def incidents(self) -> Path:
+        return self.day_dir / INCIDENTS_FILE
+
+    @property
+    def equity(self) -> Path:
+        return self.day_dir / EQUITY_FILE
+
+    @property
+    def agent_events(self) -> Path:
+        return self.day_dir / AGENT_EVENTS_FILE
+
 
 def session_paths(config: AppConfig, day: date) -> SessionPaths:
     results = Path(config.agent.results_dir)
@@ -262,6 +281,34 @@ def session_paths(config: AppConfig, day: date) -> SessionPaths:
         journal=journal,
         socket=Path(config.agent.socket_path),
     )
+
+
+class EquitySampler:
+    """Writes the session's equity every ``interval`` for the daily report's drawdown."""
+
+    def __init__(
+        self,
+        execution: ExecutionEngine,
+        sink: Callable[[EquitySample], None],
+        interval: timedelta,
+    ) -> None:
+        self._execution = execution
+        self._sink = sink
+        self._interval = interval
+        self._next: datetime | None = None
+
+    async def sample(self, now: datetime, *, force: bool = False) -> None:
+        if not force and self._next is not None and now < self._next:
+            return
+        self._next = now + self._interval
+        state = await self._execution.risk_state()
+        self._sink(
+            EquitySample(
+                at=now,
+                equity=state.equity,
+                open_positions=len(self._execution.ledger.open_positions),
+            )
+        )
 
 
 def briefing_for(
@@ -362,6 +409,9 @@ async def _run(
     paths.ledger.parent.mkdir(parents=True, exist_ok=True)
     ledger_sink = JsonlLedgerSink(paths.ledger)
     journal_sink = JsonlJournalSink(paths.journal, secrets=secrets)
+    incident_sink = JsonlIncidentSink(paths.incidents)
+    equity_sink = JsonlEquitySink(paths.equity)
+    latency_sink = JsonlLatencySink(paths.agent_events)
     recorder = (
         Recorder(
             Path(config.market.recording_dir), {i.instrument_id: i.symbol for i in instruments}
@@ -418,8 +468,21 @@ async def _run(
             # Gate 1 (WP13) has not screened any playbook version yet.
             screened=(),
             briefing=lambda: briefing_for(config, calendar, day, playbooks),
+            latency_sink=latency_sink,
         )
         engine.bridge = bridge
+        guardian = Guardian(
+            config=config.guardian,
+            window=window,
+            execution=execution,
+            incidents=IncidentLog(sink=incident_sink),
+            symbols=engine.symbols,
+            snapshot=feed.snapshot,
+            agent=bridge,
+        )
+        sampler = EquitySampler(
+            execution, equity_sink, timedelta(seconds=config.guardian.equity_sample_seconds)
+        )
         await execution.start_day(day)
         server = BridgeServer(bridge, paths.socket)
         await server.start()
@@ -429,32 +492,54 @@ async def _run(
         feed_stop = asyncio.Event()
         feed_task = asyncio.create_task(feed.run(feed_stop))
         try:
-            await _loop(engine, window, stop)
+            await _loop(engine, guardian, sampler, stop)
         finally:
             feed_stop.set()
             await feed_task
             await server.close()
+            bridge.flush_latency()
             journal.record_outcomes(ledger)
+            await sampler.sample(utc_now(), force=True)
         return 0 if engine.flat else 1
     finally:
-        ledger_sink.close()
-        journal_sink.close()
+        for sink in (ledger_sink, journal_sink, incident_sink, equity_sink, latency_sink):
+            sink.close()
         if recorder is not None:
             recorder.close()
+        try:
+            write_report(paths.day_dir)
+        except Exception:
+            log.exception("daily report failed", extra={"day": day.isoformat()})
 
 
-async def _loop(engine: SessionEngine, window: TradingWindow, stop: asyncio.Event) -> None:
+async def _loop(
+    engine: SessionEngine, guardian: Guardian, sampler: EquitySampler, stop: asyncio.Event
+) -> None:
+    """Pump, step, then the guardian, each failure recorded without stopping the others."""
     next_step = utc_now()
     while not stop.is_set():
-        await engine.pump()
+        try:
+            await engine.pump()
+        except Exception as error:
+            log.exception("market pump failed")
+            guardian.record_error("market pump", error)
         now = utc_now()
         if now >= next_step:
-            await engine.step(now)
+            try:
+                await engine.step(now)
+            except Exception as error:
+                log.exception("engine step failed")
+                guardian.record_error("engine step", error, now)
+            try:
+                await guardian.check(now)
+            except Exception:
+                log.critical("guardian check failed", exc_info=True)
+            try:
+                await sampler.sample(now)
+            except Exception:
+                log.exception("equity sample failed")
             next_step = now + STEP_INTERVAL
-            if now >= window.end and engine.flat:
-                break
-            if now >= window.hard_flat_deadline:
-                log.error("still not flat at the hard deadline")
+            if guardian.session_over(now):
                 break
         try:
             await asyncio.wait_for(stop.wait(), PUMP_INTERVAL.total_seconds())
