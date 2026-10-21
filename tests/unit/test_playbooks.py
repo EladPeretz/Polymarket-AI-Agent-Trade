@@ -401,3 +401,12 @@ def test_playbooks_doc_lists_the_coded_bounds():
         assert f"### `{kind.id}`" in text
         for b in parameter_bounds(kind.params_type):
             assert f"| `{b.name}` | {b.default} | {b.minimum} | {b.maximum} |" in text, (kind.id, b)
+
+
+def test_momentum_scalp_handles_a_lookback_without_volume():
+    rise = path(OPEN, [D(200) + D("0.1") * i for i in range(1, 31)], first_open="200", volume="0")
+    last = path(OPEN + minutes(30), ["203.5"], first_open="203", volume="5")
+    snap = replace(features(rise + last), regime=TREND_UP)
+    setup = MomentumScalp().evaluate(snap, CONTEXT)
+    assert setup is not None
+    assert "breakout volume after minutes with none" in setup.reasons
