@@ -27,7 +27,7 @@ import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -101,6 +101,12 @@ class Gate1Result:
     by_symbol: Mapping[str, Stats]
     exits: Mapping[str, int]
     sample: tuple[BacktestTrade, ...]
+    # In-target trades before the hold-out, and in it (``backtest.holdout_days``).
+    design: Stats
+    holdout: Stats
+    holdout_start: date | None
+    # Design-period trades with a target, by its distance in expected moves.
+    by_reach: Mapping[str, Stats]
 
 
 def evaluate(
@@ -159,6 +165,14 @@ def evaluate(
         by_regime.setdefault(regime_key(trade), []).append(trade)
         by_symbol.setdefault(trade.symbol, []).append(trade)
         exits[str(trade.exit_reason)] = exits.get(str(trade.exit_reason), 0) + 1
+    holdout_start = (
+        result.end - timedelta(days=config.holdout_days - 1) if config.holdout_days else None
+    )
+    design = [t for t in target if holdout_start is None or t.day < holdout_start]
+    holdout = [t for t in target if holdout_start is not None and t.day >= holdout_start]
+    by_reach: dict[str, list[BacktestTrade]] = {}
+    for trade in design:
+        by_reach.setdefault(reach_bucket(trade.target_reach), []).append(trade)
     return Gate1Result(
         tag=playbook.tag,
         playbook_id=playbook.id,
@@ -177,7 +191,26 @@ def evaluate(
         by_symbol={k: stats(v) for k, v in sorted(by_symbol.items())},
         exits=dict(sorted(exits.items())),
         sample=review_sample(target, config.review_sample),
+        design=stats(design),
+        holdout=stats(holdout),
+        holdout_start=holdout_start,
+        by_reach={k: stats(by_reach[k]) for k in REACH_BUCKETS if k in by_reach},
     )
+
+
+# "n/a": no target, or no volatility to measure it by.
+REACH_BUCKETS = ("≤1", "1–2", "2–3", ">3", "n/a")
+
+
+def reach_bucket(reach: Decimal | None) -> str:
+    """A target's distance in expected moves over the hold, as a report bucket."""
+    if reach is None:
+        return "n/a"
+    if reach <= 1:
+        return "≤1"
+    if reach <= 2:
+        return "1–2"
+    return "2–3" if reach <= 3 else ">3"
 
 
 def regime_key(trade: BacktestTrade) -> str:
@@ -243,6 +276,8 @@ def trade_json(trade: BacktestTrade) -> dict[str, Any]:
         "funding": _decimal(trade.funding),
         "net_pnl": _decimal(trade.net_pnl),
         "net_r": _decimal(trade.net_r, 3),
+        "expected_move": _decimal(trade.expected_move, 6),
+        "target_reach": _decimal(trade.target_reach, 3),
         "entry_regime": list(trade.entry_regime.labels),
         "session_regime": list(trade.session_regime.labels),
     }
@@ -270,6 +305,10 @@ def result_json(result: Gate1Result) -> dict[str, Any]:
         "by_regime": {k: stats_json(v) for k, v in result.by_regime.items()},
         "by_symbol": {k: stats_json(v) for k, v in result.by_symbol.items()},
         "exits": dict(result.exits),
+        "holdout_start": None if result.holdout_start is None else result.holdout_start.isoformat(),
+        "design": stats_json(result.design),
+        "holdout": stats_json(result.holdout),
+        "by_target_reach": {k: stats_json(v) for k, v in result.by_reach.items()},
         "sample": [trade_json(t) for t in result.sample],
     }
 

@@ -93,6 +93,9 @@ class BacktestTrade:
     entry_regime: Regime
     # The session's regime at the window end, which Gate 1 judges by.
     session_regime: Regime
+    # One standard deviation of the move over the planned hold, at the signal:
+    # 1-minute volatility × √(minutes to the time stop). None without volatility.
+    expected_move: Decimal | None = None
 
     @property
     def playbook_id(self) -> str:
@@ -105,6 +108,13 @@ class BacktestTrade:
     @property
     def net_r(self) -> Decimal:
         return self.net_pnl / self.risk
+
+    @property
+    def target_reach(self) -> Decimal | None:
+        """The target's distance from the entry in expected moves (``None`` without either)."""
+        if self.target_price is None or not self.expected_move:
+            return None
+        return abs(self.target_price - self.entry_price) / self.expected_move
 
 
 @dataclass(slots=True)
@@ -137,6 +147,7 @@ class _Working:
     setup: Setup
     signal_at: datetime
     entry_regime: Regime
+    expected_move: Decimal | None
 
 
 @dataclass(slots=True)
@@ -144,6 +155,7 @@ class _Open:
     setup: Setup
     signal_at: datetime
     entry_regime: Regime
+    expected_move: Decimal | None
     entry_at: datetime
     entry_price: Decimal
     marketable: bool
@@ -312,7 +324,9 @@ class Backtester:
             if not fresh or book.working is not None or book.open is not None:
                 continue
             assert setup is not None
-            book.working = _Working(setup, features.at, features.regime)
+            book.working = _Working(
+                setup, features.at, features.regime, expected_move(features, setup)
+            )
             tallies[playbook.tag].signals += 1
 
     # --- Fills ---
@@ -377,6 +391,7 @@ class Backtester:
             setup=setup,
             signal_at=working.signal_at,
             entry_regime=working.entry_regime,
+            expected_move=working.expected_move,
             entry_at=now,
             entry_price=price,
             marketable=marketable,
@@ -464,4 +479,14 @@ class Backtester:
             funding=position.funding,
             entry_regime=position.entry_regime,
             session_regime=position.entry_regime,
+            expected_move=position.expected_move,
         )
+
+
+def expected_move(features: FeatureSnapshot, setup: Setup) -> Decimal | None:
+    """One standard deviation of the price move from the signal to the setup's time stop."""
+    vol = features.volatility.minute_vol_bp
+    minutes = int((setup.time_stop - features.at) / MINUTE)
+    if vol is None or minutes <= 0:
+        return None
+    return features.price * vol / BP * Decimal(minutes).sqrt()

@@ -73,10 +73,16 @@ def render(result: BacktestResult, gates: Sequence[Gate1Result], symbols: Sequen
             lines.append("* Exits: " + ", ".join(f"{k} {v}" for k, v in g.exits.items()) + ".")
         lines += ["", _STATS_HEAD, _stats_row("Target sessions", g.target)]
         lines.append(_stats_row("Other sessions", g.other))
+        if g.holdout_start is not None:
+            lines.append(_stats_row(f"design (before {g.holdout_start})", g.design))
+            lines.append(_stats_row(f"hold-out (from {g.holdout_start})", g.holdout))
         for key, s in g.by_regime.items():
             lines.append(_stats_row(f"regime {key}", s))
         for key, s in g.by_symbol.items():
             lines.append(_stats_row(key, s))
+        if g.by_reach:
+            lines += ["", "Design period by target distance, in expected moves over the hold:", ""]
+            lines += [_STATS_HEAD] + [_stats_row(f"target {k}", s) for k, s in g.by_reach.items()]
         if g.sample:
             lines += [
                 "",
