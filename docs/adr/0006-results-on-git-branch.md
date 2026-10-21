@@ -18,5 +18,9 @@ merged into `main`. Multi-day summaries are generated from that branch.
 * Results are versioned, diffable and visible on GitHub with no extra service.
 * Session-end publishing must be robust. If it fails, the guardian records the
   incident, and the next session retries publishing the previous day's results.
+* Implemented in WP11: `perps-agent publish` (idempotent, retried, never
+  touches the checkout) and `perps-agent fetch-results`; see overview §3.12.
+  A failed publish is recorded as a `publish_failed` incident in that day's
+  `incidents.jsonl`.
 * Repository size grows slowly. Raw recordings of books and trades are larger and
   may move to object storage later (separate ADR).

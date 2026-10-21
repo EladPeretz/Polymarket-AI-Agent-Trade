@@ -180,7 +180,7 @@ class Journal:
             position = ledger.position(link.position_id)
             if position is None or position.is_open or link.position_id in self._outcomes:
                 continue
-            outcome = self.record(_outcome(self._clock(), link.decision_id, position, ledger))
+            outcome = self.record(trade_outcome(self._clock(), link.decision_id, position, ledger))
             assert isinstance(outcome, TradeOutcome)
             recorded.append(outcome)
         return recorded
@@ -302,9 +302,10 @@ class Journal:
             raise JournalError(f"unknown decision {decision_id}") from None
 
 
-def _outcome(
+def trade_outcome(
     at: datetime, decision_id: str, position: LedgerPosition, ledger: Ledger
 ) -> TradeOutcome:
+    """A closed position's result from the ledger (also used by the daily report)."""
     assert position.closed_at is not None
     orders: dict[str, OrderSent] = {}
     exit_value = exit_quantity = Decimal(0)

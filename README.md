@@ -62,6 +62,17 @@ call the agent's tools from another shell (ADR-0011):
 .venv/bin/perps-agent agent get_snapshot '{"symbol": "NVDA-USD"}'
 ```
 
+After the session: the daily report, and the results branch (ADR-0006). The
+guardian's kill switch stops a running session:
+
+```bash
+.venv/bin/perps-agent report --date 2026-10-20   # rebuild results/<date>/report.md and .json
+.venv/bin/perps-agent publish                    # commit every local day to paper-results and push
+.venv/bin/perps-agent fetch-results --days 10    # copy recent days back from paper-results
+.venv/bin/perps-agent kill --reason "..."        # close everything, no new entries this session
+.venv/bin/perps-agent kill --clear               # remove the switch before the next session
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

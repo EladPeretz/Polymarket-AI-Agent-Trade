@@ -16,8 +16,10 @@ out through the same risk engine and execution paths every order uses
   is L0, changing its prices is L1, and the size may not exceed the setup's cap.
   Until Gate 1 (WP13) no playbook is screened, so playbook signals are context
   only and the agent trades them, if at all, as L2 (owner decision 2026-10-21).
-* **Liveness.** ``last_call_at`` is when the agent last called a tool, for the
-  guardian's agent-liveness check (WP11).
+* **Liveness and latency.** ``last_seen_at`` (the start or end of the agent's
+  latest tool call) and ``calls_in_flight`` feed the guardian's agent-liveness
+  check (WP11). Each delivered event's pickup and answer times go to
+  ``latency_sink`` (:mod:`perps_agent.agent.latency`) for the daily report.
 """
 
 import asyncio
@@ -34,6 +36,7 @@ from pydantic import BaseModel, ValidationError
 
 from perps_agent.agent import context
 from perps_agent.agent.context import Json
+from perps_agent.agent.latency import EventLatency
 from perps_agent.agent.schemas import (
     AddToPosition,
     AdjustProtection,
@@ -139,6 +142,7 @@ class AgentBridge:
         playbooks: Sequence[Playbook[Any]],
         screened: Iterable[str] = (),
         briefing: Callable[[], str] | None = None,
+        latency_sink: Callable[[EventLatency], None] | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._config = config
@@ -164,6 +168,11 @@ class AgentBridge:
         self._entry_block: str | None = None
         self._halted = False
         self.last_call_at: datetime | None = None
+        self.last_seen_at: datetime | None = None
+        self.calls_in_flight = 0
+        self._latency_sink = latency_sink
+        # Delivered events waiting for the agent's next call: (event, delivered at).
+        self._unanswered: list[tuple[AgentEvent, datetime]] = []
         self.tools: dict[str, Tool] = {t.name: t for t in self._tool_list()}
 
     # --- Engine side ---
@@ -321,8 +330,37 @@ class AgentBridge:
             request = tool.schema.model_validate(dict(args or {}))
         except ValidationError as error:
             raise ToolError(f"invalid arguments for {name}: {error}") from None
-        self.last_call_at = self._now()
-        return await tool.run(request)
+        now = self._now()
+        self.last_call_at = self.last_seen_at = now
+        self._answer(now, name)
+        self.calls_in_flight += 1
+        try:
+            return await tool.run(request)
+        finally:
+            self.calls_in_flight -= 1
+            self.last_seen_at = self._now()
+
+    def flush_latency(self) -> None:
+        """Record delivered events the agent never answered (at session end)."""
+        self._answer(None, None)
+
+    def _answer(self, at: datetime | None, tool: str | None) -> None:
+        unanswered, self._unanswered = self._unanswered, []
+        if self._latency_sink is None:
+            return
+        for event, delivered_at in unanswered:
+            self._latency_sink(
+                EventLatency(
+                    event_id=event.event_id,
+                    kind=event.kind,
+                    key=event.key,
+                    symbol=event.symbol,
+                    raised_at=event.at,
+                    delivered_at=delivered_at,
+                    answered_at=at,
+                    answer_tool=tool,
+                )
+            )
 
     def describe_tools(self) -> list[Json]:
         return [
@@ -420,6 +458,8 @@ class AgentBridge:
             batch.append(self._queue.popleft())
         if not self._queue:
             self._wakeup.clear()
+        delivered_at = self._now()
+        self._unanswered.extend((e, delivered_at) for e in batch)
         symbols = list(dict.fromkeys(e.symbol for e in batch if e.symbol is not None))
         return {
             "events": [self._event_view(e) for e in batch],

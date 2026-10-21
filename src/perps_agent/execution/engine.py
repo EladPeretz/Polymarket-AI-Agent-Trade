@@ -18,6 +18,9 @@ books every outcome in the ledger, and keeps each position protected.
 * **Incidents.** A venue report the ledger cannot book, or a liquidation, is
   logged and blocks new entries until :meth:`ExecutionEngine.clear_entry_block`;
   the rest of the batch is still booked and protected.
+* **Holds.** The guardian blocks new entries for its own reasons (kill switch,
+  agent liveness, a ledger mismatch) with :meth:`ExecutionEngine.hold_entries`,
+  each under its own key, so releasing one never clears another or an incident.
 
 Every order carries a fresh 32-hex client order id. Engine-run trailing rules
 and exit plans (ADR-0009) build on :meth:`update_protection` and
@@ -104,6 +107,8 @@ class ExecutionEngine:
         self._closing: dict[str, str] = {}
         # Why new entries are blocked (an incident), or ``None``.
         self._entry_block: str | None = None
+        # Guardian holds on new entries: key → reason.
+        self._holds: dict[str, str] = {}
 
     # --- Day and state ---
 
@@ -138,12 +143,30 @@ class ExecutionEngine:
 
     @property
     def entry_block(self) -> str | None:
-        """Why new entries are refused after an incident, or ``None``."""
+        """Why new entries are refused (an incident or a guardian hold), or ``None``."""
+        if self._entry_block is not None:
+            return self._entry_block
+        return next(iter(self._holds.values()), None)
+
+    @property
+    def incident(self) -> str | None:
+        """The incident that blocks new entries, if any (guardian holds excluded)."""
         return self._entry_block
 
     def clear_entry_block(self) -> None:
         """Allow entries again once the incident has been looked at."""
         self._entry_block = None
+
+    @property
+    def holds(self) -> Mapping[str, str]:
+        return dict(self._holds)
+
+    def hold_entries(self, key: str, reason: str) -> None:
+        """Refuse new entries and adds until :meth:`release_entries` with the same key."""
+        self._holds[key] = reason
+
+    def release_entries(self, key: str) -> None:
+        self._holds.pop(key, None)
 
     # --- Entries ---
 
@@ -153,8 +176,9 @@ class ExecutionEngine:
         if not verdict.approved or order is None:
             raise ExecutionError(f"verdict for {verdict.intent.symbol} is {verdict.decision}")
         intent = verdict.intent
-        if self._entry_block is not None:
-            raise ExecutionError(f"entries are blocked: {self._entry_block}")
+        block = self.entry_block
+        if block is not None:
+            raise ExecutionError(f"entries are blocked: {block}")
         age = self._now() - verdict.evaluated_at
         if age > self._risk.verdict_ttl:
             raise ExecutionError(

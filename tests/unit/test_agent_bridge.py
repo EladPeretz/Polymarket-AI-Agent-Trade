@@ -347,3 +347,38 @@ def test_describe_tools_has_schemas():
     tools = {t["name"]: t for t in desk.bridge.describe_tools()}
     assert "propose_trade" in tools and "next_event" in tools
     assert "scenarios" in tools["propose_trade"]["input"]["properties"]
+
+
+def test_liveness_tracks_calls_in_flight():
+    desk = AgentDesk()
+    seen = []
+
+    async def waiting() -> None:
+        task = asyncio.create_task(desk.bridge.call("next_event", {"timeout_seconds": 1}))
+        await asyncio.sleep(0)
+        seen.append(desk.bridge.calls_in_flight)
+        await task
+
+    desk.run(waiting())
+    assert seen == [1]
+    assert desk.bridge.calls_in_flight == 0
+    assert desk.bridge.last_seen_at == NOW
+
+
+def test_latency_of_each_delivered_event_is_recorded():
+    desk = AgentDesk()
+    records = []
+    desk.bridge._latency_sink = records.append
+    desk.bridge.notify(TriggerKind.CHECK_IN, "check_in", "check-in", at=NOW - timedelta(seconds=5))
+    desk.call("next_event", timeout_seconds=0)
+    assert records == []
+    desk.clock.now = NOW + timedelta(seconds=20)
+    desk.call("get_portfolio")
+    assert len(records) == 1
+    record = records[0]
+    assert record.key == "check_in" and record.answer_tool == "get_portfolio"
+    assert record.pickup_seconds == 5 and record.answer_seconds == 20
+    desk.bridge.notify(TriggerKind.CHECK_IN, "check_in", "again")
+    desk.call("next_event", timeout_seconds=0)
+    desk.bridge.flush_latency()
+    assert records[-1].answered_at is None and records[-1].answer_seconds is None

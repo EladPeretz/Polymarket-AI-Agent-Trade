@@ -9,6 +9,8 @@ from pydantic import TypeAdapter
 
 from perps_agent.ledger.events import LedgerEvent
 
+LEDGER_FILE = "ledger.jsonl"
+
 _ADAPTER: TypeAdapter[LedgerEvent] = TypeAdapter(LedgerEvent)
 
 

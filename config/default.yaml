@@ -101,6 +101,21 @@ execution:
   trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
   trail_min_step_bp: 2              # ... and only by at least this much
 
+# Guardian (docs/architecture/overview.md §3.10). Not learnable (ADR-0010).
+guardian:
+  kill_switch: false                # true: close everything, no entries, every session
+  kill_switch_file: data/KILL_SWITCH  # `perps-agent kill` creates it; latched for the session
+  agent_timeout_seconds: 600        # hold entries after this long without an agent tool call
+  stale_incident_seconds: 30        # stale data this long inside the window is an incident
+  reconcile_interval_seconds: 60    # ledger vs venue positions
+  equity_sample_seconds: 60         # equity samples for the daily report's drawdown
+
+# Results branch (ADR-0006): results/<date>/ is committed here, never to main.
+results:
+  branch: paper-results
+  remote: origin
+  push_attempts: 4
+
 # Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
 live:
   enabled: false

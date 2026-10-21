@@ -266,10 +266,11 @@ Implementation (`agent/`, WP10).
 * **Session engine** (`app/session.py`): `perps-agent run` loads history and
   bars, starts the feed, simulator, execution, exit plans, trigger detector,
   journal and ledger (`results/<date>/`), serves the bridge, and runs until the
-  window has closed and the book is flat. Until the guardian (WP11) it closes
-  everything itself at the window end.
-* `bridge.last_call_at` is the agent's last tool call, for the guardian's
-  liveness check (WP11).
+  guardian says the session is over (§3.10). At the end it records trade
+  outcomes and writes the daily report (§3.12).
+* `bridge.last_seen_at` and `bridge.calls_in_flight` feed the guardian's
+  liveness check; the bridge also records each delivered event's pickup and
+  answer times for the report (`agent_events.jsonl`).
 
 ### 3.6 Autonomy model: playbooks plus bounded discretion
 
@@ -480,6 +481,34 @@ An independent supervisor task inside the engine, with no LLM dependency:
 * **Engine liveness (live):** exchange-side stops plus the dead man's switch
   protect the account even if the whole process dies.
 
+Implementation (`guardian/`, WP11). `Guardian.check(now)` runs after every
+engine step (once a second), in its own `try`, so a failing step never stops
+it; engine errors are recorded as incidents. It only closes, cancels and holds
+entries, never changes a risk rule.
+
+* **Window close:** from `window_end` it calls `close_all` on every check
+  (retrying failed exits) until `hard_flat_deadline`. Still not flat then: a
+  critical `not_flat` incident, and the session ends.
+* **Kill switch:** `guardian.kill_switch: true` or the file
+  `guardian.kill_switch_file` (`perps-agent kill`, removed with `--clear`).
+  Closes everything and holds entries, latched for the session.
+* **Agent liveness:** while entries are allowed, no agent tool call for
+  `agent_timeout_seconds` (600) holds entries; a call in progress (a waiting
+  `next_event`) counts as alive. Released when the agent calls again.
+* **Stale data:** a symbol stale for `stale_incident_seconds` (30) inside the
+  window is a warning; recovery is noted. The risk engine already rejects
+  entries on stale snapshots.
+* **Reconciliation:** `ExecutionEngine.mismatches()` every
+  `reconcile_interval_seconds` (60); a difference on two checks in a row holds
+  entries for the session (critical).
+* **Holds** are `ExecutionEngine.hold_entries(key, reason)`, separate from
+  execution's own incident block, so releasing one never clears another. The
+  bridge reports a new block to the agent as a risk event.
+* **Incidents** (`results/<date>/incidents.jsonl`): info, warning or critical.
+  Warnings and worse go to the alert, which in paper mode is a log line marked
+  `alert` (owner decision 2026-10-21: logs, incidents file and the top of the
+  daily report; a push channel is added before the live pilot).
+
 ### 3.11 Ledger, reconciler and journal (`ledger/`, `journal/`)
 
 * Event-sourced ledger: every order, fill, funding payment and fee is recorded as
@@ -524,6 +553,34 @@ Cloud sessions are temporary, so at the end of each session the run commits
 **`paper-results` branch** (ADR-0006). The daily report covers trades, PnL
 (gross, fees, funding, net), per-autonomy-level attribution, risk rejections,
 incidents, and agent latency.
+
+Implementation (`report/`, `app/results.py`, WP11).
+
+* A day directory holds `ledger.jsonl`, `journal.jsonl`, `incidents.jsonl`,
+  `equity.jsonl` (equity every `guardian.equity_sample_seconds`),
+  `agent_events.jsonl` (per delivered event: raised, delivered, answered) and
+  `report.md` / `report.json`.
+* `build_report(day_dir)` rebuilds the report from those files alone
+  (`perps-agent report --date`): incidents first, then start/end equity,
+  return, gross PnL, fees, funding, net PnL and the intraday max drawdown
+  (peak to trough from the start equity); every closed trade (level, source,
+  entry, exit, net, R, exit reason); attribution by autonomy level, source
+  (playbook id or discretionary) and symbol; decisions by action; risk verdicts
+  with each rejection and resize and its checks; execution refusals; and agent
+  latency (pickup median and max, answer median, p90 and max). Scenarios and
+  assumptions are never shown (ADR-0010).
+* Each paper session starts from `sim.starting_collateral`, so days do not
+  compound; the multi-day equity curve is the starting collateral plus the
+  cumulative net PnL.
+* `perps-agent publish` commits every local day (or `--date`) under
+  `results/<date>/` on `results.branch` and pushes it, with git plumbing and a
+  temporary index: the checkout and its branch are never touched. Unchanged
+  days add nothing, so publishing is idempotent and a later run retries what
+  an earlier one failed to publish. Pushes are retried (2, 4, 8 s); a final
+  failure is a critical `publish_failed` incident in the newest day. Only
+  `.jsonl`, `.json` and `.md` files are published, with known secret values
+  replaced. `perps-agent fetch-results` copies recent days back (for the
+  briefing in a fresh cloud session) without overwriting local days.
 
 ### 3.13 Decision process and learning loop (`agent/`, ADR-0010)
 
@@ -598,7 +655,8 @@ src/perps_agent/
   sim/          paper/backtest simulator
   guardian/     window close, kill switch, liveness
   ledger/       event-sourced ledger, reconciler
-  journal/      decision journal, daily report
+  journal/      decision journal
+  report/       daily report
   app/          entry points: run (paper|live), backtest, report
 config/         default.yaml, symbols/<SYMBOL>.yaml (no secrets)
 tests/          unit/, contract/, simulation/
