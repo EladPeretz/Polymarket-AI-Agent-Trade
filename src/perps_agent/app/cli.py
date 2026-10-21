@@ -173,6 +173,12 @@ def _config_check(path: Path, mode: Mode | None, *, strict: bool) -> int:
         return 1
 
     problems = readiness_problems(config, load_secrets())
+    tags = {p.tag for p in load_playbooks()}
+    problems += [
+        f"agent.exempt_playbooks: {tag} is not a current playbook version"
+        for tag in config.agent.exempt_playbooks
+        if tag not in tags
+    ]
     print(json.dumps(config.model_dump(mode="json"), indent=2))
     if problems:
         label = "error" if strict else "warning"
@@ -382,7 +388,9 @@ def _prompt(path: Path, day: date | None) -> int:
     if day is None:
         day = utc_now().astimezone(config.session.zone).date()
     try:
-        briefing = briefing_for(config, calendar, day, load_playbooks())
+        briefing = briefing_for(
+            config, calendar, day, load_playbooks(), config.agent.exempt_playbooks
+        )
     except CalendarError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

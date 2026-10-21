@@ -3,7 +3,9 @@
 Bars come from two places that must agree: REST 1-minute candles for history
 (seeded at startup and for backtests) and the live trades stream. A bar built
 from trades has the exact notional; one from a candle estimates it from the
-typical price ``(high + low + close) / 3``. Minutes without trades have no bar.
+typical price ``(high + low + close) / 3``. Mark prices fill the minutes
+without trades with zero-volume bars, so thinly traded symbols still have a
+price path; a trade in such a minute turns it into a traded bar.
 """
 
 from collections.abc import Iterable, Sequence
@@ -111,6 +113,31 @@ class MinuteBars:
                 close=trade.price,
                 volume=bar.volume + trade.quantity,
                 notional=bar.notional + notional,
+            )
+
+    def add_mark(self, price: Decimal, at: datetime) -> None:
+        """Extend the minute's price-only bar with a mark; traded minutes are left alone."""
+        start = minute_of(at)
+        bar = self._bars.get(start)
+        if bar is None:
+            self._bars[start] = Bar(
+                start=start,
+                open=price,
+                high=price,
+                low=price,
+                close=price,
+                volume=Decimal(0),
+                notional=Decimal(0),
+            )
+        elif bar.volume == 0:
+            self._bars[start] = Bar(
+                start=start,
+                open=bar.open,
+                high=max(bar.high, price),
+                low=min(bar.low, price),
+                close=price,
+                volume=bar.volume,
+                notional=bar.notional,
             )
 
     def prune(self, now: datetime) -> None:

@@ -55,6 +55,8 @@ class TradeIntent(BaseModel):
     stop_price: PositiveDecimal
     target_price: PositiveDecimal | None = None
     time_stop: UtcDatetime | None = None
+    # A limit entry still working after this long is cancelled (``None``: the default).
+    entry_timeout_seconds: Annotated[int, Field(ge=1)] | None = None
     thesis: Annotated[str, Field(min_length=1)]
     confidence: Annotated[Decimal, Field(ge=0, le=1)]
 

@@ -86,7 +86,9 @@ def build_features(
             start = min(start, market.open)
             todays = [b for b in bars if market.open <= b.start < now]
             bucket = session.open * config.profile_bucket_bp / BP
-            profile = volume_profile(todays, bucket, config.value_area_fraction)
+            profile = volume_profile(
+                todays, bucket, config.value_area_fraction, by_time=session.volume_sparse
+            )
     return FeatureSnapshot(
         symbol=symbol,
         at=now,

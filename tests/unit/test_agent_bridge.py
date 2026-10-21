@@ -64,6 +64,51 @@ def test_rejection_is_returned_with_reasons_and_journaled():
     assert [e.type for e in desk.journal.entries] == ["decision", "risk_verdict"]
 
 
+def _thin_book_for(desk: AgentDesk, calls: int) -> list[int]:
+    """The view's first ``calls`` snapshots show a thin book; returns the call counter."""
+    seen = [0]
+    real = desk.view.snapshot
+
+    def snapshot(symbol: str):
+        seen[0] += 1
+        snap = real(symbol)
+        if seen[0] > calls:
+            return snap
+        thin = {
+            side: (getattr(snap, side)[0].model_copy(update={"quantity": D(1)}),)
+            for side in ("bids", "asks")
+        }
+        return snap.model_copy(update=thin)
+
+    desk.view.snapshot = snapshot  # type: ignore[method-assign]
+    return seen
+
+
+FAST_RECHECK = CONFIG.model_copy(
+    update={"agent": CONFIG.agent.model_copy(update={"market_recheck_interval_ms": 0})}
+)
+
+
+def test_a_thin_book_is_checked_again_before_rejecting():
+    desk = AgentDesk(config=FAST_RECHECK)
+    desk.market(0)
+    _thin_book_for(desk, calls=2)  # the proposal's snapshot and the first recheck
+    result = desk.call("propose_trade", **proposal())
+    assert result["decision"] == "approved"
+    assert result["market_rechecks"] == 2
+    assert [e.type for e in desk.journal.entries] == ["decision", "risk_verdict", "order_linked"]
+
+
+def test_a_book_that_stays_thin_is_rejected_after_the_rechecks():
+    desk = AgentDesk(config=FAST_RECHECK)
+    desk.market(0)
+    _thin_book_for(desk, calls=100)
+    result = desk.call("propose_trade", **proposal())
+    assert result["decision"] == "rejected"
+    assert result["market_rechecks"] == CONFIG.agent.market_recheck_attempts
+    assert any(r.startswith("depth") for r in result["reasons"])
+
+
 def test_hold_minutes_becomes_a_time_stop():
     desk = AgentDesk()
     _enter(desk, hold_minutes=30)

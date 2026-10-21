@@ -108,6 +108,15 @@ class AgentConfig(_Model):
     # appear in snapshots, labelled unscreened; the agent may act on them only as
     # L2 (discretionary) trades. Owner decision, 2026-10-21.
     unscreened_playbook_signals: bool = True
+    # Playbook versions (tags ``<id>@<version>.<hash>``) treated as screened
+    # without Gate 1: the six initial versions. Any change makes a new tag,
+    # which needs the screen. Owner decision, 2026-10-21.
+    exempt_playbooks: tuple[str, ...] = ()
+    # An entry rejected only for a thin book or a wide spread is evaluated again
+    # on fresh snapshots, up to this many times this far apart, before the
+    # rejection goes back to the agent. Owner decision, 2026-10-21.
+    market_recheck_attempts: Annotated[int, Field(ge=0, le=20)] = 6
+    market_recheck_interval_ms: Annotated[int, Field(ge=0, le=2_000)] = 500
 
 
 class MarketDataConfig(_Model):
@@ -156,7 +165,10 @@ class RiskConfig(_Model):
     # recent 15-minute range from entry (and never closer than min_stop_distance_bp).
     stop_floor_range_multiple: Annotated[Decimal, Field(ge=1, le=5)] = Decimal(1)
     max_spread_bp: PositiveDecimal | None = None
-    min_top_of_book_notional: PositiveDecimal | None = None
+    # Resting notional on each side of the book, counting the levels within
+    # book_depth_band_bp of that side's best price (0: the best level only).
+    min_book_depth_notional: PositiveDecimal | None = None
+    book_depth_band_bp: Annotated[Decimal, Field(ge=0, le=200)] = Decimal(25)
     # Stop must be at most this fraction of the distance from entry to liquidation.
     liquidation_buffer_fraction: Fraction | None = None
     max_snapshot_age_ms: Annotated[int, Field(ge=1)] = 2_000
@@ -191,6 +203,10 @@ class FeaturesConfig(_Model):
     max_trend_vwap_crosses: Annotated[int, Field(ge=0, le=50)] = 3
     # No regime label before this much of the session has traded.
     regime_min_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+    # Venue volume can be thin or stale on some symbols. When fewer than this
+    # share of the session's minutes traded, VWAP and the profile are
+    # time-weighted (from mark-filled bars) instead of volume-weighted.
+    min_traded_minutes_share: Annotated[Decimal, Field(ge=0, le=1)] = Decimal("0.5")
 
 
 class TriggersConfig(_Model):
@@ -201,6 +217,13 @@ class TriggersConfig(_Model):
     large_move_seconds: Annotated[int, Field(ge=5, le=900)] = 60
     large_move_sigma: Annotated[Decimal, Field(gt=0, le=20)] = Decimal(3)
     large_move_min_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(15)
+    # Without a 1-minute volatility yet, the threshold is at least this share of
+    # the 15-minute range.
+    large_move_range_fraction: Annotated[Decimal, Field(ge=0, le=2)] = Decimal("0.5")
+    # After a large move, the symbol's next ones wait this long, unless price
+    # has gone this many thresholds beyond where the last one fired.
+    large_move_cooldown_seconds: Annotated[int, Field(ge=0, le=1_800)] = 300
+    large_move_escalation: Annotated[Decimal, Field(ge=1, le=10)] = Decimal(2)
     # Position events: the stop is this close (share of the entry-to-stop
     # distance left), the target this far along, or the time stop this near.
     approaching_stop_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.25")
@@ -232,6 +255,8 @@ class ExecutionConfig(_Model):
 
     # A limit entry still working after this long is cancelled.
     entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 120
+    # The longest timeout the agent may ask for on a single limit entry.
+    max_entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 900
     # Exits are reduce-only IOC orders limited this far through the mark, so a
     # thin book cannot fill them at any price.
     exit_slippage_bp: Annotated[Decimal, Field(gt=0, le=500)] = Decimal(50)

@@ -10,7 +10,7 @@ calibration statistics join it with the learning loop (WP14).
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -70,6 +70,8 @@ def build_briefing(
     if window is None:
         lines += ["Not a trading day: no window today.", ""]
     else:
+        warmup = config.features.regime_min_minutes
+        regime_from = window.market.open + timedelta(minutes=warmup)
         lines += [
             "## Window (New York)",
             "",
@@ -77,6 +79,9 @@ def build_briefing(
             f"{window.end.astimezone(zone):%H:%M}; entries until "
             f"{window.entry_cutoff.astimezone(zone):%H:%M}; everything is flat by "
             f"{window.end.astimezone(zone):%H:%M}.",
+            f"* Regime labels appear from {regime_from.astimezone(zone):%H:%M} "
+            f"({warmup} minutes after the open); until then `regime` is null and the "
+            "opening range is still forming.",
         ]
         if window.market.early_close:
             lines.append(
@@ -103,7 +108,8 @@ def build_briefing(
         "counting what open positions would lose at their stops. It is the only stop for "
         "the day.",
         f"* At most {risk.max_concurrent_positions} positions at once, one per symbol; "
-        f"{risk.max_trades_per_day} entries a day, of which {risk.max_l2_trades_per_day} L2.",
+        f"{risk.max_trades_per_day} entries a day, of which {risk.max_l2_trades_per_day} L2. "
+        "An entry that is cancelled without any fill gives its slot back.",
         f"* Stops at least the 15-minute range from entry (never under "
         f"{risk.min_stop_distance_bp} bp); a target, if set, at least {risk.min_reward_risk}R "
         "after costs.",
@@ -114,6 +120,12 @@ def build_briefing(
     passed = [p for p in playbooks if p.tag in screened]
     if passed:
         lines.append("Screened (may trade as L0/L1): " + ", ".join(p.tag for p in passed) + ".")
+    exempt = set(config.agent.exempt_playbooks)
+    if any(p.tag in exempt for p in passed):
+        lines.append(
+            "The initial versions are exempt from Gate 1 by owner decision; a changed "
+            "version needs the screen."
+        )
     pending = [p.id for p in playbooks if p.tag not in screened]
     if pending:
         context = (

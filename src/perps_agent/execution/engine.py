@@ -3,8 +3,9 @@ books every outcome in the ledger, and keeps each position protected.
 
 * **Entries** send exactly the order the risk engine approved (``RiskVerdict.order``),
   after setting the approved leverage, and only while the verdict is fresh
-  (``RiskEngine.verdict_ttl``). A limit entry still working after
-  ``entry_timeout_seconds`` is cancelled.
+  (``RiskEngine.verdict_ttl``). A limit entry still working after its timeout
+  (the agent's, capped at ``max_entry_timeout_seconds``, or
+  ``entry_timeout_seconds``) is cancelled.
 * **Protection.** As soon as an entry or add fills, the position TP/SL is set to
   the approved stop (and target), and confirmed in the ledger. If it cannot be
   set, the position is closed. A position the ledger shows without a confirmed
@@ -52,7 +53,14 @@ from perps_agent.ledger import (
     OrderSent,
     ProtectionChanged,
 )
-from perps_agent.risk import RiskCheck, RiskEngine, RiskReason, RiskState, RiskVerdict
+from perps_agent.risk import (
+    RiskCheck,
+    RiskEngine,
+    RiskReason,
+    RiskState,
+    RiskVerdict,
+    TradeIntent,
+)
 from perps_agent.sim import (
     FillEvent,
     FundingPayment,
@@ -212,6 +220,7 @@ class ExecutionEngine:
             # What the approved order risks, after any resize: adds stay within it.
             approved_risk=verdict.risk_amount,
             leverage=verdict.leverage,
+            timeout_seconds=self._entry_timeout(intent),
         )
 
     # --- Exits ---
@@ -340,11 +349,12 @@ class ExecutionEngine:
     async def tick(self, now: datetime | None = None) -> None:
         """Timers: entry timeouts, time stops, pending closes and unprotected positions."""
         now = to_utc(now) if now is not None else self._now()
-        timeout = timedelta(seconds=self._config.entry_timeout_seconds)
+        default = self._config.entry_timeout_seconds
         expired = [
             o
             for o in self.ledger.live_orders(purposes=_OPENS)
-            if o.sent.time_in_force is TimeInForce.GTC and now - o.sent.at >= timeout
+            if o.sent.time_in_force is TimeInForce.GTC
+            and now - o.sent.at >= timedelta(seconds=o.sent.timeout_seconds or default)
         ]
         await self._cancel(expired)
         for position in self.ledger.open_positions:
@@ -385,6 +395,11 @@ class ExecutionEngine:
     def _block_entries(self, reason: str) -> None:
         if self._entry_block is None:
             self._entry_block = reason
+
+    def _entry_timeout(self, intent: TradeIntent) -> int:
+        """The intent's own entry timeout, within the configured maximum."""
+        wanted = intent.entry_timeout_seconds or self._config.entry_timeout_seconds
+        return min(wanted, self._config.max_entry_timeout_seconds)
 
     def _pending_risk(self) -> Decimal:
         """What the unfilled quantity of working entries and adds would lose at their stops."""

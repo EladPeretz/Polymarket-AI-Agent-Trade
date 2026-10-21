@@ -78,6 +78,44 @@ def test_duplicate_and_settlement_trades_are_ignored():
     assert only.volume == 1 and only.high == 200
 
 
+def test_marks_fill_minutes_without_trades():
+    bars = MinuteBars()
+    bars.add_trades([_trade(1, 1, "200")])
+    bars.add_mark(D("200.5"), OPEN + timedelta(seconds=30))  # traded minute: untouched
+    bars.add_mark(D(201), OPEN + timedelta(seconds=65))
+    bars.add_mark(D("201.4"), OPEN + timedelta(seconds=80))
+    bars.add_mark(D("200.8"), OPEN + timedelta(seconds=110))
+    traded, marked = bars.bars()
+    assert traded.high == 200 and traded.volume == 1
+    assert (marked.open, marked.high, marked.low, marked.close) == (
+        D(201),
+        D("201.4"),
+        D("200.8"),
+        D("200.8"),
+    )
+    assert marked.volume == 0
+    # A trade in a mark-filled minute makes it a traded bar.
+    bars.add_trades([_trade(2, 115, "200.9")])
+    assert bars.bars()[1].volume == 1 and bars.bars()[1].high == D("201.4")
+
+
+def test_sparse_volume_switches_vwap_and_profile_to_time_weighting():
+    # One heavy trade at 200 at the open, then 9 price-only minutes at 205.
+    session = path(OPEN, ["200"], wick="0", volume="10") + path(
+        OPEN + minutes(1), ["205"] * 9, first_open="205", wick="0", volume="0"
+    )
+    snap = features(session, price="205")
+    s = snap.session
+    assert s is not None and s.volume_sparse
+    assert s.vwap == (D(200) + 9 * D(205)) / 10
+    assert snap.profile is not None and snap.profile.value_area_low > 200
+    # With volume on most minutes, VWAP stays volume-weighted.
+    traded = path(OPEN, ["200", "205"], wick="0", volumes=["30", "10"])
+    dense = features(traded, price="205").session
+    assert dense is not None and not dense.volume_sparse
+    assert dense.vwap == sum(b.notional for b in traded) / 40
+
+
 def test_candles_seed_bars_and_trades_merge_into_them():
     candle = Candle(
         instrument_id=19,

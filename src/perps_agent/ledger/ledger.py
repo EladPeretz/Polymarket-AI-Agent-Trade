@@ -41,6 +41,8 @@ class LedgerOrder:
     filled_quantity: Decimal = Decimal(0)
     resting_quantity: Decimal = Decimal(0)
     failed: bool = False
+    # Whether this entry or add counts toward the day's entry caps.
+    counted: bool = False
 
     @property
     def client_order_id(self) -> str:
@@ -211,21 +213,25 @@ class Ledger:
                 self._day_start_equity = event.equity
                 self._entries_today = 0
                 self._l2_entries_today = 0
+                for order in self._orders.values():
+                    order.counted = False
             case OrderSent():
                 if event.client_order_id in self._orders:
                     raise LedgerError(f"order {event.client_order_id} recorded twice")
-                self._orders[event.client_order_id] = LedgerOrder(sent=event)
+                order = LedgerOrder(sent=event)
+                self._orders[event.client_order_id] = order
                 if event.purpose.opens:
-                    self._entries_today += 1
-                    if event.level is AutonomyLevel.L2:
-                        self._l2_entries_today += 1
+                    self._count_entry(order, 1)
             case OrderFailed():
-                self._known_order(event.client_order_id).failed = True
+                order = self._known_order(event.client_order_id)
+                order.failed = True
+                self._release_unfilled(order)
             case OrderChanged():
                 order = self._known_order(event.client_order_id)
                 order.status = event.status
                 order.filled_quantity = event.filled_quantity
                 order.resting_quantity = event.resting_quantity
+                self._release_unfilled(order)
             case FillBooked():
                 self._apply_fill(event)
             case FundingBooked():
@@ -235,8 +241,22 @@ class Ledger:
                 position.stop_price = event.stop_price
                 position.target_price = event.target_price
 
+    def _count_entry(self, order: LedgerOrder, step: int) -> None:
+        order.counted = step > 0
+        self._entries_today += step
+        if order.sent.level is AutonomyLevel.L2:
+            self._l2_entries_today += step
+
+    def _release_unfilled(self, order: LedgerOrder) -> None:
+        """An entry or add that ended without any fill gives its slot back."""
+        if order.counted and not order.is_live and order.filled_quantity == 0:
+            self._count_entry(order, -1)
+
     def _apply_fill(self, fill: FillBooked) -> None:
         order = self._known_order(fill.client_order_id)
+        if order.sent.purpose.opens and not order.counted:
+            # A late fill on an entry already given back: it counts after all.
+            self._count_entry(order, 1)
         position = self._positions.get(fill.position_id)
         if position is None:
             if not order.sent.purpose.opens:

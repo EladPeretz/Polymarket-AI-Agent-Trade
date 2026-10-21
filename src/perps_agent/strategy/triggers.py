@@ -4,7 +4,10 @@
   only after the setup has gone away).
 * **Large move:** price moved at least ``large_move_sigma`` × the 1-minute
   volatility scaled to ``large_move_seconds``, and at least
-  ``large_move_min_bp``, within ``large_move_seconds``.
+  ``large_move_min_bp``, within ``large_move_seconds``. After one fires, the
+  symbol's next large moves are held back for ``large_move_cooldown_seconds``
+  unless price has gone ``large_move_escalation`` × the threshold beyond where
+  the last one fired; the next one that fires says how many were held back.
 * **Position:** approaching the stop or the target, or the time stop is near;
   each once per stop, target or time stop.
 * **Check-in:** every ``check_in_minutes`` from the window start.
@@ -62,6 +65,9 @@ class _SymbolState:
     prices: deque[tuple[datetime, Decimal]] = field(default_factory=deque)
     # Position events already sent, by key; cleared when the position closes.
     position_events: set[str] = field(default_factory=set)
+    # The last large move that fired, and how many were held back since.
+    last_move: tuple[datetime, Decimal] | None = None
+    held_moves: int = 0
 
 
 class TriggerDetector:
@@ -131,17 +137,30 @@ class TriggerDetector:
         if vol is not None:
             scaled = vol * (Decimal(config.large_move_seconds) / 60).sqrt()
             threshold = max(threshold, config.large_move_sigma * scaled)
+        elif features.volatility.range_15m_bp is not None:
+            range_floor = config.large_move_range_fraction * features.volatility.range_15m_bp
+            threshold = max(threshold, range_floor)
         if abs(move_bp) < threshold or threshold <= 0:
             return None
         # Start over, so one move wakes the agent once.
         prices.clear()
         prices.append((features.at, features.price))
+        cooldown = timedelta(seconds=config.large_move_cooldown_seconds)
+        if state.last_move is not None and features.at - state.last_move[0] < cooldown:
+            since_last = bp(features.price - state.last_move[1], state.last_move[1])
+            if abs(since_last) < config.large_move_escalation * threshold:
+                state.held_moves += 1
+                return None
         seconds = int((features.at - oldest_at).total_seconds())
+        detail = f"{move_bp:+.1f} bp in {seconds}s (threshold {threshold:.1f} bp)"
+        if state.held_moves:
+            detail += f"; {state.held_moves} smaller moves held back since the last one"
+        state.last_move, state.held_moves = (features.at, features.price), 0
         return Trigger(
             kind=TriggerKind.LARGE_MOVE,
             at=features.at,
             key=f"large_move:{'up' if move_bp > 0 else 'down'}",
-            detail=f"{move_bp:+.1f} bp in {seconds}s (threshold {threshold:.1f} bp)",
+            detail=detail,
             symbol=features.symbol,
         )
 
