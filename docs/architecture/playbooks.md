@@ -175,6 +175,7 @@ least the volatility floor. Target: ``target_r`` × the risk.
 ## Not in this package
 
 * The target-reachability check and any 1.5R exceptions for NVDA and MSFT wait
-  for the WP13 backtests, as agreed.
+  for the WP13 backtests, as agreed (`perps-agent backtest` produces the data;
+  the changes are separate PRs).
 * Tuning of the stop-floor multiple (`risk.stop_floor_range_multiple`, 1 for now,
   bounded 1–5) also waits for WP13.

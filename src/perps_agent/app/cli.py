@@ -8,14 +8,19 @@ import sys
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from perps_agent import __version__
 from perps_agent.agent import TransportError, system_prompt
 from perps_agent.agent import request as agent_request
+from perps_agent.app.backtest import run_backtest
 from perps_agent.app.preflight import Status, run_preflight
 from perps_agent.app.rehearsal import RehearsalCalendar, rehearsal_config, rehearsal_window
 from perps_agent.app.results import PublishError, fetch_results, local_days, publish_results
 from perps_agent.app.session import briefing_for, run_paper_session
+from perps_agent.backtest import screened_playbooks
 from perps_agent.calendar import CalendarError, TradingCalendar
 from perps_agent.clock import utc_now
 from perps_agent.config import (
@@ -38,7 +43,7 @@ from perps_agent.guardian import (
 from perps_agent.log import configure_logging
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
 from perps_agent.report import write_report
-from perps_agent.strategy.playbooks import load_playbooks
+from perps_agent.strategy.playbooks import PlaybookParamsError, load_playbooks
 from perps_agent.venue import InstrumentRegistry, VenueError, create_market_data
 
 
@@ -106,6 +111,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     prompt.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     prompt.add_argument("--date", type=date.fromisoformat, help="exchange date, YYYY-MM-DD")
 
+    backtest = commands.add_parser(
+        "backtest",
+        help="backtest the playbooks over the rolling window and record their Gate 1 screen",
+    )
+    backtest.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    backtest.add_argument(
+        "--symbol", action="append", help="limit to this symbol (repeatable; default: enabled)"
+    )
+    backtest.add_argument(
+        "--params",
+        type=Path,
+        help="YAML or JSON playbook parameters by playbook id, over the defaults",
+    )
+
     report = commands.add_parser(
         "report", help="build a day's report (report.md, report.json) from results/<date>/"
     )
@@ -140,6 +159,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command == "backtest":
+        return _backtest(args.config, args.symbol, args.params)
     if args.command == "report":
         return _report(args.config, args.date)
     if args.command == "publish":
@@ -388,15 +409,57 @@ def _prompt(path: Path, day: date | None) -> int:
     if day is None:
         day = utc_now().astimezone(config.session.zone).date()
     try:
-        briefing = briefing_for(
-            config, calendar, day, load_playbooks(), config.agent.exempt_playbooks
-        )
+        screened = screened_playbooks(Path(config.agent.results_dir), config.agent.exempt_playbooks)
+        briefing = briefing_for(config, calendar, day, load_playbooks(), screened)
     except CalendarError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     print(system_prompt())
     print(briefing)
     return 0
+
+
+def _backtest(path: Path, symbols: Sequence[str] | None, params: Path | None) -> int:
+    try:
+        config = load_config(path, mode=Mode.BACKTEST)
+        require_ready(config, load_secrets())
+        unknown = sorted(set(symbols or ()) - {s.symbol for s in config.symbols})
+        if unknown:
+            raise ConfigError(f"unknown symbols: {', '.join(unknown)}")
+        overrides = _read_params(params) if params is not None else None
+        playbooks = load_playbooks(overrides)
+    except (ConfigError, PlaybookParamsError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    configure_logging(secrets=load_secrets().secret_values())
+    try:
+        run = asyncio.run(run_backtest(config, playbooks, now=utc_now(), symbols=symbols))
+    except (VenueError, ValueError) as error:
+        logging.getLogger(__name__).error("backtest failed", extra={"error": str(error)})
+        return 1
+    print(run.report.read_text(encoding="utf-8"))
+    print(
+        json.dumps(
+            {
+                "report": str(run.report),
+                "records": [str(p) for p in run.records],
+                "passed": [g.tag for g in run.gates if g.passed],
+                "failed": [g.tag for g in run.gates if not g.passed],
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _read_params(path: Path) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise ConfigError(f"{path}: {error}") from error
+    if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
+        raise ConfigError(f"{path}: expected a mapping of playbook id to parameters")
+    return data
 
 
 def _today(config: AppConfig) -> date:

@@ -94,6 +94,7 @@ log = logging.getLogger(__name__)
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _INTERVAL_MS = {
+    "1s": 1_000,
     "1m": 60_000,
     "5m": 300_000,
     "15m": 900_000,

@@ -14,7 +14,8 @@ out through the same risk engine and execution paths every order uses
   proposal must match a live setup of that playbook, and the playbook version
   must have passed the Gate 1 backtest screen; taking the setup as it stands
   is L0, changing its prices is L1, and the size may not exceed the setup's cap.
-  Until Gate 1 (WP13) no playbook is screened, so playbook signals are context
+  Screened versions are the owner-exempt initial ones and the Gate 1 passes
+  (``backtest.screened_playbooks``); signals of any other version are context
   only and the agent trades them, if at all, as L2 (owner decision 2026-10-21).
 * **Liveness and latency.** ``last_seen_at`` (the start or end of the agent's
   latest tool call) and ``calls_in_flight`` feed the guardian's agent-liveness
