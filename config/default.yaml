@@ -32,6 +32,15 @@ agent:
   socket_path: data/agent.sock      # the engine serves the agent's tools here
   results_dir: results              # journals and ledgers by date (ADR-0006)
   unscreened_playbook_signals: true # show pre-Gate 1 playbook signals as context (L2 only)
+  # Initial playbook versions that trade as L0/L1 without Gate 1 (owner decision,
+  # 2026-10-21). A changed playbook gets a new tag and needs the screen.
+  exempt_playbooks:
+    - vwap_reversion@1.489ebf32
+    - momentum_scalp@1.88b40392
+    - mean_reversion@1.fad55a30
+    - liquidity_sweep@1.0eaca9db
+    - trend_following@1.19635a47
+    - opening_flush@1.c8af2e86
 
 # Market data feed (docs/architecture/overview.md §3.2). Book and ticker frames
 # arrive every 100 ms; a longer silence marks the snapshot stale.
@@ -56,12 +65,16 @@ features:
   trend_efficiency: 0.5             # net move / range for a trend
   max_trend_vwap_crosses: 3
   regime_min_minutes: 15            # no regime label before this
+  min_traded_minutes_share: 0.5     # fewer traded minutes: VWAP and profile time-weighted
 
 # Agent wake-ups besides playbook signals and the check-in (overview §3.4).
 triggers:
   large_move_seconds: 60
   large_move_sigma: 3               # × 1-minute volatility scaled to large_move_seconds
   large_move_min_bp: 15             # and at least this many bp
+  large_move_range_fraction: 0.5    # no 1-minute volatility yet: at least this × the 15m range
+  large_move_cooldown_seconds: 300  # a symbol's next large moves wait this long ...
+  large_move_escalation: 2          # ... unless price went this many thresholds further
   approaching_stop_fraction: 0.25   # share of the entry-to-stop distance left
   approaching_target_fraction: 0.8  # share of the way to the target
   time_stop_warning_minutes: 2
@@ -80,7 +93,8 @@ risk:
   min_stop_distance_bp: 20          # absolute stop floor
   stop_floor_range_multiple: 1      # stop ≥ this × the symbol's recent 15-minute range (WP9)
   max_spread_bp: 6
-  min_top_of_book_notional: 2000    # pUSD
+  min_book_depth_notional: 1000     # pUSD resting on each side, within the band below
+  book_depth_band_bp: 25            # count book levels within this of each side's best price
   liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
   max_snapshot_age_ms: 2000         # also how long an approved verdict may wait to be sent
   stop_slippage_bp: 5               # sizing counts this beyond the stop, plus fees
@@ -97,6 +111,7 @@ sim:
 # Order handling (docs/architecture/overview.md §3.8).
 execution:
   entry_timeout_seconds: 120        # cancel a limit entry still working after this
+  max_entry_timeout_seconds: 900    # the agent may ask for up to this per entry
   exit_slippage_bp: 50              # exits are reduce-only IOC limited this far through mark
   trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
   trail_min_step_bp: 2              # ... and only by at least this much

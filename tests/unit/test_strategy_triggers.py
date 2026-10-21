@@ -66,6 +66,42 @@ def test_a_large_move_wakes_the_agent_once():
     assert detector.on_features(after, []) == []
 
 
+def test_repeated_large_moves_are_held_back_during_the_cooldown():
+    detector = _detector()
+    base = replace(_snap(), volatility=replace(_snap().volatility, minute_vol_bp=D(2)))
+
+    def at(seconds: int, price: str):
+        return detector.on_features(
+            replace(base, at=base.at + timedelta(seconds=seconds), price=D(price)), []
+        )
+
+    assert at(0, "200") == []
+    assert len(at(30, "200.4")) == 1  # +20 bp fires
+    # Back and forth by 20 bp: held back, the price never got 2 × 15 bp away.
+    assert at(70, "200") == []
+    assert at(110, "200.4") == []
+    # 40 bp beyond where the last one fired: an extension fires at once.
+    (extended,) = at(150, "201.2")
+    assert "2 smaller moves held back" in extended.detail
+    # After the cooldown, an ordinary move fires again.
+    assert at(500, "201.2") == []
+    assert len(at(530, "200.8")) == 1
+
+
+def test_without_minute_volatility_the_15m_range_sets_the_floor():
+    detector = _detector()
+    vol = replace(_snap().volatility, minute_vol_bp=None, range_15m_bp=D(60))
+    base = replace(_snap(), volatility=vol)
+    detector.on_features(base, [])
+    # Half the 60 bp range is 30 bp, above the 15 bp minimum: 20 bp is not enough.
+    assert (
+        detector.on_features(
+            replace(base, at=base.at + timedelta(seconds=30), price=D("200.4")), []
+        )
+        == []
+    )
+
+
 def test_large_move_threshold_scales_with_volatility():
     detector = _detector()
     snap = replace(_snap(), volatility=replace(_snap().volatility, minute_vol_bp=D(10)))

@@ -73,7 +73,7 @@ from perps_agent.ledger import (
     ProtectionChanged,
 )
 from perps_agent.market import MarketSnapshot
-from perps_agent.risk import AutonomyLevel, RiskEngine, RiskVerdict, TradeIntent
+from perps_agent.risk import AutonomyLevel, RiskCheck, RiskEngine, RiskVerdict, TradeIntent
 from perps_agent.strategy import FeatureSnapshot
 from perps_agent.strategy import Trigger as StrategyTrigger
 from perps_agent.strategy.playbooks import (
@@ -88,6 +88,8 @@ log = logging.getLogger(__name__)
 
 # Events kept for lookup by id (journal triggers), oldest dropped first.
 _EVENT_MEMORY = 500
+# Rejections worth a few seconds' wait: the book often refills quickly.
+_TRANSIENT_MARKET_CHECKS = frozenset({RiskCheck.DEPTH, RiskCheck.SPREAD})
 
 
 class ToolError(Exception):
@@ -672,6 +674,7 @@ class AgentBridge:
             post_only=p.post_only,
             size=p.size,
             stop_price=p.stop_price,
+            entry_timeout_seconds=p.entry_timeout_seconds,
             target_price=p.target_price,
             time_stop=time_stop,
             thesis=p.thesis,
@@ -713,6 +716,7 @@ class AgentBridge:
             post_only=p.post_only,
             size=p.size,
             stop_price=p.stop_price,
+            entry_timeout_seconds=p.entry_timeout_seconds,
             target_price=p.target_price if p.target_price is not None else position.target_price,
             time_stop=position.time_stop,
             thesis=p.thesis,
@@ -782,18 +786,30 @@ class AgentBridge:
         adding: bool,
         plan: ExitPlan | None,
     ) -> Json:
-        state = await self._execution.risk_state()
         evaluate = self._risk.evaluate_add if adding else self._risk.evaluate
-        verdict = evaluate(
-            intent,
-            instrument=instrument,
-            snapshot=snapshot,
-            state=state,
-            range_15m=features.volatility.range_15m if features is not None else None,
-            now=self._now(),
-        )
+        settings = self._config.agent
+        rechecks = 0
+        while True:
+            verdict = evaluate(
+                intent,
+                instrument=instrument,
+                snapshot=snapshot,
+                state=await self._execution.risk_state(),
+                range_15m=features.volatility.range_15m if features is not None else None,
+                now=self._now(),
+            )
+            checks = {r.check for r in verdict.reasons}
+            transient = bool(checks) and checks <= _TRANSIENT_MARKET_CHECKS
+            if verdict.approved or not transient or rechecks >= settings.market_recheck_attempts:
+                break
+            # A thin book or a wide spread often clears within seconds.
+            rechecks += 1
+            await asyncio.sleep(settings.market_recheck_interval_ms / 1000)
+            snapshot = self._market.snapshot(intent.symbol)
         self._journal.record_verdict(decision.decision_id, verdict)
         result = {"decision_id": decision.decision_id, **_verdict_view(verdict)}
+        if rechecks:
+            result["market_rechecks"] = rechecks
         if not verdict.approved:
             return result
         try:

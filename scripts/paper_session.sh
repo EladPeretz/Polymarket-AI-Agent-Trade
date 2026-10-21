@@ -3,6 +3,7 @@
 #
 #   scripts/paper_session.sh start    install, preflight, fetch past results, start the engine
 #   scripts/paper_session.sh status   is the engine running? (exit 0 yes, 1 no)
+#   scripts/paper_session.sh stop     end the session early: close everything, then exit
 #   scripts/paper_session.sh finish   wait for the engine to end, then publish the results
 #
 # Each step stays under the cloud session's 10-minute limit for one command.
@@ -86,6 +87,28 @@ status() {
   return 1
 }
 
+stop() {
+  if ! engine_running; then
+    say "engine not running"
+    return 0
+  fi
+  # SIGTERM: the engine holds entries, closes everything and exits flat.
+  say "asking the engine to end the session early"
+  kill -TERM "$(cat "$PID_FILE")" || return 1
+  local waited=0
+  while engine_running && ((waited < 180)); do
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if engine_running; then
+    say "engine still running after ${waited}s; last log lines:"
+    tail -n 20 "$LOG"
+    return 4
+  fi
+  say "engine stopped; run finish to publish"
+  return 0
+}
+
 finish() {
   local waited=0
   while engine_running && ((waited < FINISH_WAIT_SECONDS)); do
@@ -115,9 +138,10 @@ finish() {
 case "${1:-}" in
   start) shift; start "$@" ;;
   status) status ;;
+  stop) stop ;;
   finish) finish ;;
   *)
-    echo "usage: $0 start [run options] | status | finish" >&2
+    echo "usage: $0 start [run options] | status | stop | finish" >&2
     exit 2
     ;;
 esac

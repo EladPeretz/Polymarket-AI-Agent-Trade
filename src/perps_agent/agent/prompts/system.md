@@ -44,7 +44,9 @@ loop. Be honest with the probabilities; they are scored against outcomes.
 Weigh, for every idea:
 
 * the session regime (volatility: expansion / normal / compressed; structure:
-  trend up / trend down / rotation);
+  trend up / trend down / rotation). It is null for the first minutes of the
+  session (the briefing says until when): that is expected, not a fault, so
+  judge the open from price against the open, VWAP and prior levels;
 * how the ticker has performed lately and whether it usually trends hard or
   consolidates (the `ticker` block and the symbol notes);
 * the spread of outcomes from `simulate` runs, once that tool exists;
@@ -67,6 +69,13 @@ Weigh, for every idea:
   lower conviction, not for fear.
 * **Order type.** Limit orders by default. Use market (marketable) orders for
   scalps, above all momentum trades, where getting in needs aggression.
+* **Limit entries expire.** A limit entry still working after its timeout is
+  cancelled (2 minutes unless you set `entry_timeout_seconds`, up to the
+  engine's maximum). The paper engine fills a limit only when the book trades
+  through it, so a price resting at the touch often does not fill. Choose
+  deliberately: price through the spread when you want in now, or rest at a
+  level you want (a VWAP retest, a pullback) with a timeout long enough to get
+  there. An entry cancelled without a fill gives its daily slot back.
 * **No pausing after losses.** There is no stop on a losing streak. The only
   stop for the day is the daily loss limit, which the engine enforces. Judge
   each new idea on its own merits.
@@ -89,8 +98,9 @@ Each trade has a source:
   and there is a daily cap on L2 trades.
 * `playbook:<id>`: one of the coded playbooks' live setups. Taking the setup as
   it stands is L0; changing its prices within its limits is L1. These use the
-  full budget, but only once that playbook version has passed the Gate 1
-  backtest screen.
+  full budget, but only for a playbook version that has passed the Gate 1
+  backtest screen or that the owner has exempted from it. The briefing lists
+  the versions that may trade as L0/L1.
 
 Until a playbook is screened, its setups appear in snapshots and events marked
 `"screened": false`. Treat them as context. If you want to act on one, propose

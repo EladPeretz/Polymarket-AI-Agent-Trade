@@ -97,6 +97,8 @@ def features_view(features: FeatureSnapshot) -> Json:
                 else None
             ),
             "relative_volume": ratio(session.relative_volume),
+            # VWAP and the profile are time-weighted: too few minutes traded.
+            "volume_sparse": True if session.volume_sparse else None,
         }
     profile = features.profile
     if profile is not None:

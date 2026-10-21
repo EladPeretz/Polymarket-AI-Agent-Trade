@@ -3,6 +3,8 @@ import json
 import yaml
 
 from perps_agent.app.cli import main
+from perps_agent.config import load_config
+from perps_agent.strategy.playbooks import load_playbooks
 from tests.conftest import COMPLETE_RISK, COMPLETE_SIM, REPO_ROOT
 
 
@@ -29,6 +31,23 @@ def test_config_check_strict_passes_when_ready(write_config, capsys):
     path = write_config({"risk": COMPLETE_RISK, "sim": COMPLETE_SIM})
     assert main(["config-check", "--config", str(path), "--strict"]) == 0
     assert "ready for paper mode" in capsys.readouterr().err
+
+
+def test_config_check_flags_an_exempt_playbook_that_no_longer_exists(write_config, capsys):
+    path = write_config(
+        {
+            "risk": COMPLETE_RISK,
+            "sim": COMPLETE_SIM,
+            "agent": {"exempt_playbooks": ["vwap_reversion@1.00000000"]},
+        }
+    )
+    assert main(["config-check", "--config", str(path), "--strict"]) == 1
+    assert "vwap_reversion@1.00000000 is not a current playbook version" in capsys.readouterr().err
+
+
+def test_the_default_config_exempts_the_current_playbook_versions():
+    config = load_config(REPO_ROOT / "config" / "default.yaml")
+    assert set(config.agent.exempt_playbooks) == {p.tag for p in load_playbooks()}
 
 
 def test_config_check_reports_invalid_config(tmp_path, capsys):
