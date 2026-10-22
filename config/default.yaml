@@ -126,6 +126,7 @@ backtest:
   min_expectancy_r: 0               # Gate 1: in-target net expectancy per trade, R
   max_trade_share: 0.25             # Gate 1: no trade above this share of net PnL
   review_sample: 10                 # trades listed per playbook for review
+  holdout_days: 21                  # last days reported apart; tune only on the days before
 
 # Guardian (docs/architecture/overview.md §3.10). Not learnable (ADR-0010).
 guardian:

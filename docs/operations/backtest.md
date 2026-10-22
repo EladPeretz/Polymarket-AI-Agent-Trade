@@ -30,5 +30,13 @@ written under that tag.
   session's `fetch-results` brings the records from `paper-results`, so publish
   after running the backtest elsewhere. The owner-exempt initial versions
   (`agent.exempt_playbooks`) stay screened whatever their record says.
+* **Hold-out:** the last `backtest.holdout_days` (21) of the window are reported
+  apart ("design" and "hold-out" rows). Tune playbooks on the design period
+  only and look at the hold-out once, so a change is judged on days it was not
+  fitted to. Gate 1 itself uses the whole window.
+* **Target reachability:** each trade records the expected move over its
+  planned hold (1-minute volatility × √minutes to the time stop) and its
+  target's distance in those units (`target_reach`); the report groups the
+  design period by it.
 * **Re-validation:** rerun weekly as the window rolls (ADR-0008), and for every
   new playbook version before it is used.

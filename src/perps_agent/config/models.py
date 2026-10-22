@@ -306,6 +306,9 @@ class BacktestConfig(_Model):
     max_trade_share: Fraction = Decimal("0.25")
     # Trades listed per playbook for the reviewed sample.
     review_sample: Annotated[int, Field(ge=0, le=100)] = 10
+    # The window's last days, reported apart as a hold-out: tune playbooks on
+    # the days before it and check them once on it. Gate 1 uses the whole window.
+    holdout_days: Annotated[int, Field(ge=0, le=90)] = 21
 
 
 class ResultsConfig(_Model):

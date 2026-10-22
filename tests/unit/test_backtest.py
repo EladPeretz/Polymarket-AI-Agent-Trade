@@ -473,3 +473,37 @@ def test_run_backtest_writes_report_and_records(tmp_path: Path) -> None:
     trades = (run_.report.parent / "trades.jsonl").read_text().splitlines()
     assert len(trades) == 1 and json.loads(trades[0])["exit_reason"] == "time_stop"
     assert run_.records == (tmp_path / "results" / "gate1" / f"{playbook.tag}.json",)
+
+
+def test_trades_carry_the_expected_move_over_the_hold() -> None:
+    # Alternating marks give a known 1-minute volatility before the signal.
+    wiggle = {
+        AT - minutes(i): mark(AT - minutes(i), "200", "200.2", "199.8", "200.2" if i % 2 else "200")
+        for i in range(1, 61)
+    }
+    playbook = scripted({AT: setup(entry=None, time_stop=AT + minutes(16))})
+    trade = only(run(playbook, day_data(mark_changes=wiggle)))
+    assert trade.expected_move is not None and trade.expected_move > 0
+    assert trade.target_reach == abs(trade.target_price - trade.entry_price) / trade.expected_move
+    assert only(run(scripted({AT: setup(entry=None)}), day_data())).target_reach is None
+
+
+def test_gate1_reports_design_and_holdout_apart() -> None:
+    early = replace(trade("1"), day=DAY - timedelta(days=30))
+    late = trade("-1", n=1)
+    result = replace(result_of([early, late]), start=DAY - timedelta(days=40))
+    gate = evaluate(MOMENTUM, result, BacktestConfig(holdout_days=21), T0)
+    assert gate.holdout_start == DAY - timedelta(days=20)
+    assert (gate.design.trades, gate.holdout.trades) == (1, 1)
+    assert gate.design.net_pnl == 1 and gate.holdout.net_pnl == -1
+    assert list(gate.by_reach) == ["n/a"]  # no expected move recorded
+    assert evaluate(MOMENTUM, result, BacktestConfig(holdout_days=0), T0).holdout_start is None
+
+
+def test_reach_buckets() -> None:
+    from perps_agent.backtest.gate import reach_bucket
+
+    assert [reach_bucket(D(x)) for x in ("0.5", "1", "1.5", "2.5", "4")] == [
+        "≤1", "≤1", "1–2", "2–3", ">3",
+    ]  # fmt: skip
+    assert reach_bucket(None) == "n/a"
