@@ -141,6 +141,14 @@ class ClosePosition(_Model):
     event_id: str | None = None
 
 
+class CancelEntry(_Model):
+    """Withdraw the symbol's working entry or add before it fills."""
+
+    symbol: str
+    reason: Text
+    event_id: str | None = None
+
+
 class JournalNote(_Model):
     """Reasoning not tied to an order: a note, or a decision to stand aside."""
 

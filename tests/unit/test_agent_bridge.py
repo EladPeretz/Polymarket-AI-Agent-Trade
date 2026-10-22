@@ -315,6 +315,34 @@ def test_sync_reports_an_entry_that_did_not_fill():
     assert keys == ["order:entry_unfilled"]
 
 
+def test_cancel_entry_withdraws_a_working_entry_and_gives_its_slot_back():
+    desk = AgentDesk()
+    desk.market(0)
+    desk.call(
+        "propose_trade", **proposal(order_type="limit", limit_price="199.5", stop_price="198.5")
+    )
+    assert desk.call("get_portfolio")["trades_today"] == "1/12"
+    answer = desk.call("cancel_entry", symbol=SYMBOL, reason="setup gone")
+    assert answer == {"done": True, "cancelled": 1}
+    assert desk.call("get_portfolio")["working_entries"] == []
+    assert desk.call("get_portfolio")["trades_today"] == "0/12"
+    decision = _decisions(desk)[-1]
+    assert decision.action is Action.CANCEL and decision.thesis == "setup gone"
+    desk.sync()
+    keys = [e["key"] for e in desk.call("next_event", timeout_seconds=0)["events"]]
+    assert keys == ["order:entry_unfilled"]
+
+
+def test_cancel_entry_needs_a_working_entry():
+    desk = AgentDesk()
+    with pytest.raises(ToolError, match="no working entry"):
+        desk.call("cancel_entry", symbol=SYMBOL, reason="x")
+    _enter(desk)
+    with pytest.raises(ToolError, match="no working entry"):
+        desk.call("cancel_entry", symbol=SYMBOL, reason="x")
+    assert desk.ledger.open_position(SYMBOL) is not None
+
+
 # --- Management ---
 
 

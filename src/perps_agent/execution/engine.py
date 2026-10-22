@@ -238,6 +238,10 @@ class ExecutionEngine:
             return None
         return await self._exit(position, position.quantity, OrderPurpose.EXIT, reason)
 
+    async def cancel_entries(self, symbol: str) -> None:
+        """Cancel the symbol's working entry and add orders; an open position is untouched."""
+        await self._cancel(self.ledger.live_orders(symbol, _OPENS))
+
     async def reduce_position(self, symbol: str, fraction: Decimal, reason: str) -> OrderState:
         """Partial exit of ``fraction`` (0–1] of the open quantity."""
         if not 0 < fraction <= 1:
