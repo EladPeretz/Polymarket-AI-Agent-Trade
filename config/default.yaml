@@ -98,7 +98,7 @@ risk:
   liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
   max_snapshot_age_ms: 2000         # also how long an approved verdict may wait to be sent
   stop_slippage_bp: 5               # sizing counts this beyond the stop, plus fees
-  min_reward_risk: 2                # a target, if set, must be ≥ 2R away (costs included)
+  min_reward_risk: 1.3              # a target, if set, must be ≥ 1.3R away, costs included (owner, 2026-10-22)
 
 # Paper/backtest fill simulator (docs/architecture/overview.md §3.9). Fee rates
 # are tier 0 (venue research §8). Starting collateral is capital, set by the owner.
