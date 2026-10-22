@@ -57,7 +57,7 @@ def test_briefing_has_window_symbol_notes_limits_and_gate_status():
     assert "EIA inventory data" in text
     assert "Full size risks 0.7% of equity per trade" in text
     assert "0.7% of equity per trade, whatever the source." in text
-    assert "12 entries a day. An entry" in text
+    assert "30 entries a day. An entry" in text
     assert "Daily loss limit 3% of start-of-day equity" in text
     assert "Not yet through the Gate 1 backtest screen: vwap_reversion" in text
     assert "marked unscreened" in text
@@ -73,7 +73,7 @@ def test_briefing_states_a_reduced_discretionary_budget():
         config, day=DAY, window=WINDOW, playbooks=PLAYBOOKS, screened=(), activity=()
     )
     assert "(L0/L1); discretionary (L2) trades use 50% of that." in text
-    assert "12 entries a day, of which 4 L2." in text
+    assert "30 entries a day, of which 4 L2." in text
 
 
 def test_briefing_lists_screened_playbooks_and_idle_days():
