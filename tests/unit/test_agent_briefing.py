@@ -38,6 +38,7 @@ def test_system_prompt_carries_the_owner_style_rules():
         "The market knows better",
         "Listen and change your mind",
         "close the position, wait for the close event",
+        "Targets the market can reach",
     ):
         assert phrase in prompt
 
@@ -58,6 +59,7 @@ def test_briefing_has_window_symbol_notes_limits_and_gate_status():
     assert "Full size risks 0.7% of equity per trade" in text
     assert "0.7% of equity per trade, whatever the source." in text
     assert "30 entries a day. An entry" in text
+    assert "a target, if set, at least 1.3R after costs" in text
     assert "Daily loss limit 3% of start-of-day equity" in text
     assert "Not yet through the Gate 1 backtest screen: vwap_reversion" in text
     assert "marked unscreened" in text

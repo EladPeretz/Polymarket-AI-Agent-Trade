@@ -12,8 +12,9 @@ Common rules:
   15-minute range, 20 bp absolute minimum, plus 1 bp for price rounding). No
   15-minute range, no setup.
 * **Targets:** measured after fees and stop slippage, as the risk engine does,
-  so a setup's `reward_risk` is the number the engine checks against its 2R
-  minimum. Parameter floors are 2.1R to leave room for price rounding.
+  so a setup's `reward_risk` is the number the engine checks against its
+  minimum (`risk.min_reward_risk`, 1.3R). Parameter floors are 2.1R, set when
+  that minimum was 2R; they are unchanged so the playbook versions stay the same.
 * **Holding time:** scalps at most 15 minutes, everything else at most 2 hours,
   and never past the 12:30 window end.
 * **Order type:** limit at the current price, except the momentum scalp, which

@@ -35,9 +35,11 @@ consistently positive.
 * **Positioning data in every snapshot:** open interest, the perp premium over
   the underlying index (`premium_bp`) and recent trade flow split by aggressor
   (`flow`), next to funding.
-* **The framework does not move:** stop floor, minimum reward to risk for a
-  set target, daily loss limit, concurrent positions, daily entry cap, trading
-  window and guardian are unchanged and identical at every level (ADR-0003).
+* **The framework does not move:** stop floor, daily loss limit, concurrent
+  positions, trading window and guardian are unchanged and identical at every
+  level (ADR-0003). Later owner decisions the same day raised the daily entry
+  cap to 30 and lowered the minimum reward to risk for a set target to 1.3R, so
+  targets can match what the market can reach.
   Live trading still needs its own approval (ADR-0004).
 
 ## Consequences

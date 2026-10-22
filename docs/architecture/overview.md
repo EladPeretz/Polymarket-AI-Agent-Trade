@@ -313,7 +313,7 @@ Pre-trade checks (values set in config; capital-related values decided in Phase 
    high-low range, never closer than `min_stop_distance_bp` (20 bp). Without a
    15-minute range the intent is rejected. The agent may set wider stops,
    never closer ones. Target, if present, on the correct side and worth at least
-   `min_reward_risk` (2R) after costs, measured from the final entry price.
+   `min_reward_risk` (1.3R since 2026-10-22, owner decision) after costs, measured from the final entry price.
    A trade without a target is allowed (a runner managed by its stop). The rule
    applies at entry; targets may still be moved afterwards.
 4. Size from risk: `qty = risk_budget × size_fraction / loss per unit`, rounded

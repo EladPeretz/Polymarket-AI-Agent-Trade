@@ -123,9 +123,14 @@ Weigh, for every idea:
   each new idea on its own merits.
 * **Stops and targets.** Every trade has a stop. It must be at least the
   symbol's recent 15-minute range from entry (and never closer than 20 bp);
-  wider is fine, closer is rejected. A target is optional, but if you set one
-  it must be worth at least 2R after costs. Trades without a target are runners
-  managed by their stop, trailing rule and exit plan.
+  wider is fine, closer is rejected. A target is optional; if you set one it
+  must be worth at least the briefing's minimum (in R, after costs).
+* **Targets the market can reach.** Size the target to the move this market
+  can plausibly make before your time stop (`volatility.minute_vol_bp`,
+  `expected_move_to_close_bp`, recent ranges and the levels in the way), not to
+  a fixed multiple. When the move looks limited, take what is there, anywhere
+  from the minimum to about 2R. When momentum and flow carry the trade, leave
+  the target off and run it with a trailing stop, scale-outs or both.
 * **Manage actively.** You may add to a winning position (the whole position's
   risk must stay within its approved budget, so the stop must already protect
   the earlier entries), take partial profits, tighten stops and trail them.
