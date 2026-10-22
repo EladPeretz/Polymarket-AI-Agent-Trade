@@ -88,8 +88,8 @@ risk:
   max_position_notional: 5000       # pUSD
   max_concurrent_positions: 3
   max_trades_per_day: 12
-  max_l2_trades_per_day: 4
-  l2_risk_fraction: 0.5             # L2 trades use this share of the per-trade budget
+  max_l2_trades_per_day: 12         # discretionary entries count only against the overall cap (owner, 2026-10-22)
+  l2_risk_fraction: 1               # discretionary (L2) trades use the full per-trade budget (owner, 2026-10-22)
   min_stop_distance_bp: 20          # absolute stop floor
   stop_floor_range_multiple: 1      # stop ≥ this × the symbol's recent 15-minute range (WP9)
   max_spread_bp: 6

@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from decimal import Decimal
 
 from perps_agent.agent import SessionActivity, build_briefing, recent_activity, system_prompt
 from perps_agent.app.cli import main
@@ -34,6 +35,9 @@ def test_system_prompt_carries_the_owner_style_rules():
         "No pausing after losses",
         "perps-agent agent <tool>",
         '"screened": false',
+        "The market knows better",
+        "Listen and change your mind",
+        "close the position, wait for the close event",
     ):
         assert phrase in prompt
 
@@ -52,11 +56,24 @@ def test_briefing_has_window_symbol_notes_limits_and_gate_status():
     assert "**MSTR-USD** (L0, L1, L2). Trades as a leveraged bitcoin proxy" in text
     assert "EIA inventory data" in text
     assert "Full size risks 0.7% of equity per trade" in text
-    assert "use 50% of that" in text
+    assert "0.7% of equity per trade, whatever the source." in text
+    assert "12 entries a day. An entry" in text
     assert "Daily loss limit 3% of start-of-day equity" in text
     assert "Not yet through the Gate 1 backtest screen: vwap_reversion" in text
     assert "marked unscreened" in text
     assert "No earlier sessions on record." in text
+
+
+def test_briefing_states_a_reduced_discretionary_budget():
+    risk = REPO_CONFIG.risk.model_copy(
+        update={"l2_risk_fraction": Decimal("0.5"), "max_l2_trades_per_day": 4}
+    )
+    config = REPO_CONFIG.model_copy(update={"risk": risk})
+    text = build_briefing(
+        config, day=DAY, window=WINDOW, playbooks=PLAYBOOKS, screened=(), activity=()
+    )
+    assert "(L0/L1); discretionary (L2) trades use 50% of that." in text
+    assert "12 entries a day, of which 4 L2." in text
 
 
 def test_briefing_lists_screened_playbooks_and_idle_days():

@@ -240,10 +240,13 @@ Implementation (`agent/`, WP10).
   (`agent/schemas.py`), journaled as a decision (ADR-0010) and carried out
   through the risk engine and execution. `next_event` returns every queued
   event (up to `agent.max_events_per_call`), each involved symbol's snapshot
-  (market, features, regime, volume profile, levels, ticker profile, setups,
-  position) and the session state (time, equity, day PnL, loss room, budgets,
+  (market with funding, open interest, perp premium over the index and recent
+  trade flow by aggressor; features, regime, volume profile, levels, ticker
+  profile, setups, position) and the session state (time, equity, day PnL, loss room, budgets,
   limits, positions, working entries, today's closed trades).
-* **Proposals** name a source, not a level. `discretionary` is L2. A
+* **Proposals** name a source, not a level. `discretionary` is L2 and, since
+  ADR-0012, the primary mode: the agent is the trader and playbook setups are
+  context. A
   `playbook:<id>` proposal must match a live setup of that playbook and its
   version must have passed Gate 1; taking the setup unchanged is L0, changing
   its prices L1, never above the setup's size cap. Screened versions are the
@@ -283,7 +286,7 @@ evidence accumulates (ADR-0003):
 | - | - | - |
 | `L0` filter | Approve or veto playbook signals the engine generates | Playbook defaults |
 | `L1` playbook | Choose a playbook, direction, size and stop/target within playbook parameter limits, or stay out | Full per-trade risk budget |
-| `L2` discretionary | Propose a trade not tied to any playbook | Reduced risk budget (e.g. 50%), max N per day, wider justification required |
+| `L2` discretionary | Propose a trade not tied to any playbook: the primary mode (ADR-0012) | `l2_risk_fraction` of the budget (currently the full budget), at most `max_l2_trades_per_day` (currently the overall cap) |
 
 * Per-symbol config enables levels and sets their caps.
 * Every trade is tagged with its source (`L0`/`L1`/`L2`, playbook id), so paper

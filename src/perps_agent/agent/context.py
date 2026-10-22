@@ -6,14 +6,16 @@ nothing important. Views are plain JSON-ready dicts; numbers are strings,
 rounded for reading (prices to 6 significant digits, bp to 0.1).
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 from perps_agent.market import MarketSnapshot
 from perps_agent.strategy import FeatureSnapshot
+from perps_agent.strategy.features import BP
 from perps_agent.strategy.playbooks import Setup
+from perps_agent.venue.models import Side, Trade
 
 Json = dict[str, Any]
 
@@ -56,9 +58,28 @@ def market_view(snapshot: MarketSnapshot) -> Json:
         "funding_rate": format(ticker.funding_rate, ".3e") if ticker else None,
         "stale": snapshot.stale,
     }
+    if ticker is not None:
+        # Positioning: open contracts, and how far leveraged traders price the
+        # perp above (+) or below (−) the underlying.
+        view["open_interest"] = price(ticker.open_interest)
+        index = ticker.index_price
+        if index > 0:
+            view["premium_bp"] = bp((ticker.mark_price - index) / index * BP)
+    view["flow"] = flow_view(snapshot.recent_trades)
     if snapshot.stale:
         view["stale_reasons"] = list(snapshot.stale_reasons)
     return view
+
+
+def flow_view(trades: Sequence[Trade]) -> Json:
+    """Who has been aggressive lately: the recent public trades, split by aggressor."""
+    volume = sum((t.quantity for t in trades), Decimal(0))
+    bought = sum((t.quantity for t in trades if t.aggressor is Side.BUY), Decimal(0))
+    return {
+        "trades": len(trades),
+        "volume": price(volume),
+        "buy_share": ratio(bought / volume) if volume else None,
+    }
 
 
 def features_view(features: FeatureSnapshot) -> Json:
