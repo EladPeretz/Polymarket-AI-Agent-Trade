@@ -1,0 +1,329 @@
+{
+ "day": "2026-10-22",
+ "mode": "paper",
+ "generated_at": "2026-10-22T16:30:10.763798Z",
+ "symbols": [
+  "NVDA-USD",
+  "TSLA-USD",
+  "MSFT-USD",
+  "HOOD-USD",
+  "MSTR-USD",
+  "WTIOIL-USD"
+ ],
+ "incidents": [],
+ "start_equity": "500",
+ "end_equity": "495.3529822946220500000000000",
+ "return_fraction": "-0.0092940354107559000000000",
+ "gross_pnl": "-3.720170000000000000000000015",
+ "fees": "0.929043301725",
+ "funding": "0.00219559634705",
+ "net_pnl": "-4.647017705377950000000000015",
+ "max_drawdown": "4.6872104472529500000000000",
+ "max_drawdown_fraction": "0.0093744208945059000000000",
+ "trades": [
+  {
+   "symbol": "NVDA-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T13:36:12.657000Z",
+   "closed_at": "2026-10-22T13:46:09.602000Z",
+   "holding_minutes": "9.9",
+   "max_quantity": "1.2547",
+   "average_entry": "217.95",
+   "average_exit": "217.33",
+   "gross_pnl": "-0.777914",
+   "fees": "0.143256313525",
+   "funding": "0",
+   "net_pnl": "-0.921170313525",
+   "approved_risk": "2.7999634260",
+   "r_multiple": "-0.3289936950501438442717715699",
+   "exit_reason": "Thesis broken: the prior-low 218.06 reclaim failed, price lost VWAP and sits on the session low with only 2% of flow buying while MSFT breaks down on 22x volume. vwap_holds_as_support failed; cut at -0.45R rather than wait for the stop."
+  },
+  {
+   "symbol": "MSTR-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T13:52:56.197000Z",
+   "closed_at": "2026-10-22T15:09:16.003000Z",
+   "holding_minutes": "76.3",
+   "max_quantity": "0.754",
+   "average_entry": "148.9537400530503978779840849",
+   "average_exit": "147.17",
+   "gross_pnl": "-1.344940000000000000000000015",
+   "fees": "0.08625116000",
+   "funding": "-0.0008323640342",
+   "net_pnl": "-1.432023524034200000000000015",
+   "approved_risk": "2.098462135",
+   "r_multiple": "-0.6824157082225360239821530137",
+   "exit_reason": "time stop"
+  },
+  {
+   "symbol": "HOOD-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T14:02:30.604000Z",
+   "closed_at": "2026-10-22T14:07:08.204000Z",
+   "holding_minutes": "4.6",
+   "max_quantity": "1.260",
+   "average_entry": "101.16",
+   "average_exit": "100.46",
+   "gross_pnl": "-0.88200",
+   "fees": "0.101616480",
+   "funding": "0",
+   "net_pnl": "-0.983616480",
+   "approved_risk": "2.4442475400",
+   "r_multiple": "-0.4024209757412704606833725196",
+   "exit_reason": "Breakout failed: swept the session high 101.40 and fell back under the opening-range high 101.05 (or_high_breakout_holds failed). The squeeze is not following through; cut at about -0.35R instead of waiting for the stop."
+  },
+  {
+   "symbol": "TSLA-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T14:09:53.016000Z",
+   "closed_at": "2026-10-22T15:24:53.504000Z",
+   "holding_minutes": "75.0",
+   "max_quantity": "0.4923",
+   "average_entry": "386.19",
+   "average_exit": "383.3754702417225269144830388",
+   "gross_pnl": "1.385593",
+   "fees": "0.1515428324",
+   "funding": "0.00118847373750",
+   "net_pnl": "1.23523864133750",
+   "approved_risk": "2.7896799798",
+   "r_multiple": "0.4427886532798854335456703843",
+   "exit_reason": "time stop"
+  },
+  {
+   "symbol": "MSFT-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T14:15:25.020000Z",
+   "closed_at": "2026-10-22T14:54:43.402000Z",
+   "holding_minutes": "39.3",
+   "max_quantity": "0.6947",
+   "average_entry": "524.17",
+   "average_exit": "525.03",
+   "gross_pnl": "-0.597442",
+   "fees": "0.2915516960",
+   "funding": "0",
+   "net_pnl": "-0.8889936960",
+   "approved_risk": "2.4411535696",
+   "r_multiple": "-0.3641695086580185135436634597",
+   "exit_reason": "stop_loss"
+  },
+  {
+   "symbol": "WTIOIL-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-22T15:40:36.690000Z",
+   "closed_at": "2026-10-22T16:10:17.216000Z",
+   "holding_minutes": "29.7",
+   "max_quantity": "2.989",
+   "average_entry": "98.280",
+   "average_exit": "98.783",
+   "gross_pnl": "-1.503467",
+   "fees": "0.154824819800",
+   "funding": "0.00183948664375",
+   "net_pnl": "-1.65645233315625",
+   "approved_risk": "2.0871499530",
+   "r_multiple": "-0.7936431835074046545998221336",
+   "exit_reason": "vwap_caps_bounces failed: oil reclaimed VWAP 98.7 and the prior high 98.6 and has held above for 8 minutes. The read is wrong; close now instead of waiting for the stop 6 cents away."
+  }
+ ],
+ "open_at_end": [],
+ "by_level": [
+  {
+   "key": "L2",
+   "trades": 6,
+   "wins": 1,
+   "net_pnl": "-4.647017705377950000000000015",
+   "total_r": "-2.128854417899488063535112313",
+   "average_r": "-0.3548090696499146772558520522"
+  }
+ ],
+ "by_source": [
+  {
+   "key": "discretionary",
+   "trades": 6,
+   "wins": 1,
+   "net_pnl": "-4.647017705377950000000000015",
+   "total_r": "-2.128854417899488063535112313",
+   "average_r": "-0.3548090696499146772558520522"
+  }
+ ],
+ "by_symbol": [
+  {
+   "key": "HOOD-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-0.983616480",
+   "total_r": "-0.4024209757412704606833725196",
+   "average_r": "-0.4024209757412704606833725196"
+  },
+  {
+   "key": "MSFT-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-0.8889936960",
+   "total_r": "-0.3641695086580185135436634597",
+   "average_r": "-0.3641695086580185135436634597"
+  },
+  {
+   "key": "MSTR-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-1.432023524034200000000000015",
+   "total_r": "-0.6824157082225360239821530137",
+   "average_r": "-0.6824157082225360239821530137"
+  },
+  {
+   "key": "NVDA-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-0.921170313525",
+   "total_r": "-0.3289936950501438442717715699",
+   "average_r": "-0.3289936950501438442717715699"
+  },
+  {
+   "key": "TSLA-USD",
+   "trades": 1,
+   "wins": 1,
+   "net_pnl": "1.23523864133750",
+   "total_r": "0.4427886532798854335456703843",
+   "average_r": "0.4427886532798854335456703843"
+  },
+  {
+   "key": "WTIOIL-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-1.65645233315625",
+   "total_r": "-0.7936431835074046545998221336",
+   "average_r": "-0.7936431835074046545998221336"
+  }
+ ],
+ "decisions": {
+  "enter": 17,
+  "note": 5,
+  "close": 3,
+  "stand_aside": 2,
+  "adjust": 2,
+  "add": 2
+ },
+ "verdicts": {
+  "rejected": 7,
+  "approved": 10,
+  "resized": 2
+ },
+ "rejections": [
+  {
+   "at": "2026-10-22T13:34:29.057420Z",
+   "symbol": "HOOD-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "spread"
+   ],
+   "detail": "spread 9.47 bp > 6 bp"
+  },
+  {
+   "at": "2026-10-22T13:43:13.991620Z",
+   "symbol": "WTIOIL-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "max_positions",
+    "stop_volatility"
+   ],
+   "detail": "3 positions open; stop is 0.570 away, inside the volatility floor 0.6190 (1 × the 15-minute range 0.619)"
+  },
+  {
+   "at": "2026-10-22T13:45:47.577793Z",
+   "symbol": "WTIOIL-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "max_positions",
+    "stop_volatility"
+   ],
+   "detail": "3 positions open; stop is 0.670 away, inside the volatility floor 0.6800 (1 × the 15-minute range 0.68)"
+  },
+  {
+   "at": "2026-10-22T13:46:45.704938Z",
+   "symbol": "MSFT-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "stop_volatility"
+   ],
+   "detail": "stop is 4.50 away, inside the volatility floor 4.7200 (1 × the 15-minute range 4.72)"
+  },
+  {
+   "at": "2026-10-22T14:02:10.098359Z",
+   "symbol": "HOOD-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "stop_volatility"
+   ],
+   "detail": "stop is 1.590 away, inside the volatility floor 1.6400 (1 × the 15-minute range 1.64)"
+  },
+  {
+   "at": "2026-10-22T14:02:21.107050Z",
+   "symbol": "HOOD-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "stop_volatility"
+   ],
+   "detail": "stop is 1.560 away, inside the volatility floor 1.6400 (1 × the 15-minute range 1.64)"
+  },
+  {
+   "at": "2026-10-22T14:09:44.816397Z",
+   "symbol": "TSLA-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "stop_volatility"
+   ],
+   "detail": "stop is 4.54 away, inside the volatility floor 4.7800 (1 × the 15-minute range 4.78)"
+  }
+ ],
+ "resizes": [
+  {
+   "at": "2026-10-22T14:45:17.252711Z",
+   "symbol": "MSTR-USD",
+   "level": "L2",
+   "decision": "resized",
+   "checks": [
+    "add_risk"
+   ],
+   "detail": "budget cut to the position's remaining 2.098462135"
+  },
+  {
+   "at": "2026-10-22T14:45:34.651921Z",
+   "symbol": "MSTR-USD",
+   "level": "L2",
+   "decision": "resized",
+   "checks": [
+    "add_risk"
+   ],
+   "detail": "budget cut to the position's remaining 2.098462135"
+  }
+ ],
+ "failures": [],
+ "latency": {
+  "events": 101,
+  "answered": 100,
+  "pickup_median_seconds": 0.01094,
+  "pickup_max_seconds": 41.04231,
+  "answer_median_seconds": 6.31335,
+  "answer_p90_seconds": 10.608015,
+  "answer_max_seconds": 16.646598
+ }
+}
