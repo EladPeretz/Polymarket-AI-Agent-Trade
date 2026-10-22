@@ -198,7 +198,7 @@ uses a small tool surface served by the engine:
 | `adjust_protection(symbol, stop, target)` | Tighten a stop or move/remove a target, within risk rules |
 | `update_exit_plan(symbol, plan)` | Replace the position's exit plan (scale-outs, breakeven rule, trailing rule) at any time |
 | `set_trailing_stop(symbol, rule)` | Start or change the trailing rule the engine applies continuously |
-| `add_to_position(symbol, intent)` | Add size to a profitable position (same risk checks as a new trade, plus §3.7 rule 10) |
+| `add_to_position(symbol, intent)` | Add size to a profitable position (same risk checks as a new trade, plus §3.7 rule 10). Its optional hold time can move the position's time stop later, never earlier |
 | `reduce_position(symbol, fraction, reason)` | Partial exit |
 | `close_position(symbol, reason)` | Exit now |
 | `journal(note)` | Record reasoning that isn't tied to an action |

@@ -279,6 +279,10 @@ class Ledger:
                 )
                 if tighter:
                     position.planned_stop = order.sent.stop_price
+            if order.sent.purpose is OrderPurpose.ADD and order.sent.time_stop is not None:
+                # An add may give the position more time, never less.
+                if position.time_stop is not None and order.sent.time_stop > position.time_stop:
+                    position.time_stop = order.sent.time_stop
         else:
             if fill.quantity > position.quantity:
                 raise LedgerError(

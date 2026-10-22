@@ -380,6 +380,37 @@ def test_add_keeps_the_position_source():
     assert verdicts[-1].verdict.intent.direction is Direction.LONG
 
 
+def _add(desk: AgentDesk, **overrides) -> dict:
+    add = proposal(stop_price="200.5", size="0.2", **overrides)
+    for key in ("side", "source"):
+        add.pop(key)
+    result = desk.call("add_to_position", **add)
+    desk.market(1_300, mark="201.5", bid="201.48", ask="201.52")
+    return result
+
+
+def test_add_hold_minutes_moves_the_time_stop_out_never_in():
+    desk = AgentDesk()
+    _enter(desk, hold_minutes=30)
+    entered = desk.ledger.open_position(SYMBOL).quantity
+    desk.market(1_000, mark="201.5", bid="201.48", ask="201.52")
+    added_at = desk.clock.now
+    assert _add(desk, hold_minutes=60)["decision"] == "approved"
+    position = desk.ledger.open_position(SYMBOL)
+    assert position is not None and position.quantity > entered
+    assert position.time_stop == added_at + timedelta(minutes=60)
+    _add(desk, hold_minutes=1)
+    assert desk.ledger.open_position(SYMBOL).time_stop == added_at + timedelta(minutes=60)
+
+
+def test_add_without_hold_minutes_keeps_the_time_stop():
+    desk = AgentDesk()
+    _enter(desk, hold_minutes=30)
+    desk.market(1_000, mark="201.5", bid="201.48", ask="201.52")
+    _add(desk)
+    assert desk.ledger.open_position(SYMBOL).time_stop == NOW + timedelta(minutes=30)
+
+
 def test_stand_aside_note():
     desk = AgentDesk()
     answer = desk.call(

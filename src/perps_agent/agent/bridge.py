@@ -660,13 +660,7 @@ class AgentBridge:
     async def _propose_trade(self, p: TradeProposal) -> Json:
         instrument = self._instrument(p.symbol)
         level, tag = self._resolve_source(p)
-        now = self._now()
-        time_stop = None
-        if p.hold_minutes is not None:
-            time_stop = now + timedelta(minutes=p.hold_minutes)
-            window = self._calendar.window_at(now)
-            if window is not None:
-                time_stop = min(time_stop, window.end)
+        time_stop = self._hold_until(p.hold_minutes)
         intent = TradeIntent(
             symbol=p.symbol,
             direction=p.side,
@@ -720,7 +714,7 @@ class AgentBridge:
             stop_price=p.stop_price,
             entry_timeout_seconds=p.entry_timeout_seconds,
             target_price=p.target_price if p.target_price is not None else position.target_price,
-            time_stop=position.time_stop,
+            time_stop=_later(position.time_stop, self._hold_until(p.hold_minutes)),
             thesis=p.thesis,
             confidence=p.confidence,
         )
@@ -743,6 +737,15 @@ class AgentBridge:
         return await self._evaluate_and_send(
             decision, intent, instrument, snapshot, features, adding=True, plan=None
         )
+
+    def _hold_until(self, hold_minutes: int | None) -> datetime | None:
+        """The time stop ``hold_minutes`` from now, never after the window end."""
+        if hold_minutes is None:
+            return None
+        now = self._now()
+        time_stop = now + timedelta(minutes=hold_minutes)
+        window = self._calendar.window_at(now)
+        return min(time_stop, window.end) if window is not None else time_stop
 
     def _resolve_source(self, p: TradeProposal) -> tuple[AutonomyLevel, str | None]:
         playbook_id = p.playbook_id
@@ -1023,6 +1026,16 @@ def _source(position: LedgerPosition) -> str:
 
 def _setup_key(position: LedgerPosition) -> str:
     return position.playbook.split("@", 1)[0] if position.playbook else "discretionary"
+
+
+def _later(current: datetime | None, requested: datetime | None) -> datetime | None:
+    """An add's time stop: ``current`` moved out to ``requested``, never brought in.
+
+    ``None`` for ``current`` means the position runs to the window end already.
+    """
+    if current is None or requested is None:
+        return current
+    return max(current, requested)
 
 
 def _verdict_view(verdict: RiskVerdict) -> Json:
