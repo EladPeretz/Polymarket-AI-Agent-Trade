@@ -102,21 +102,37 @@ def build_briefing(
     lines += [
         "## Your limits (enforced by the risk engine)",
         "",
-        f"* Full size risks {_pct(risk.per_trade_risk_fraction)} of equity per trade "
-        f"(L0/L1); discretionary (L2) trades use {_pct(risk.l2_risk_fraction)} of that.",
+        f"* Full size risks {_pct(risk.per_trade_risk_fraction)} of equity per trade"
+        + (
+            ", whatever the source."
+            if risk.l2_risk_fraction == 1
+            else f" (L0/L1); discretionary (L2) trades use {_pct(risk.l2_risk_fraction)} of that."
+        ),
         f"* Daily loss limit {_pct(risk.daily_loss_limit_fraction)} of start-of-day equity, "
         "counting what open positions would lose at their stops. It is the only stop for "
         "the day.",
         f"* At most {risk.max_concurrent_positions} positions at once, one per symbol; "
-        f"{risk.max_trades_per_day} entries a day, of which {risk.max_l2_trades_per_day} L2. "
-        "An entry that is cancelled without any fill gives its slot back.",
+        f"{risk.max_trades_per_day} entries a day"
+        + (
+            f", of which {risk.max_l2_trades_per_day} L2"
+            if risk.max_l2_trades_per_day is not None
+            and risk.max_trades_per_day is not None
+            and risk.max_l2_trades_per_day < risk.max_trades_per_day
+            else ""
+        )
+        + ". An entry that is cancelled without any fill gives its slot back.",
         f"* Stops at least the 15-minute range from entry (never under "
         f"{risk.min_stop_distance_bp} bp); a target, if set, at least {risk.min_reward_risk}R "
         "after costs.",
         "",
     ]
 
-    lines += ["## Playbooks", ""]
+    lines += [
+        "## Playbooks",
+        "",
+        "Playbook setups are other traders' textbook patterns: context about what many "
+        "participants are watching, not instructions. You are the trader.",
+    ]
     passed = [p for p in playbooks if p.tag in screened]
     if passed:
         lines.append("Screened (may trade as L0/L1): " + ", ".join(p.tag for p in passed) + ".")
@@ -129,8 +145,8 @@ def build_briefing(
     pending = [p.id for p in playbooks if p.tag not in screened]
     if pending:
         context = (
-            "Their setups still show up, marked unscreened: context only, act on one as a "
-            "discretionary (L2) trade if you want it."
+            "Their setups still show up, marked unscreened; act on one as a discretionary "
+            "trade if your own read agrees."
             if config.agent.unscreened_playbook_signals
             else "Their setups are hidden until they pass."
         )
@@ -151,7 +167,7 @@ def build_briefing(
         lines += [
             "",
             f"Sessions without a trade: {idle} of the last {len(ran)}. In normal conditions "
-            "that should be at most about one a week, so keep looking for valid setups.",
+            "that should be at most about one a week, so keep looking for opportunities.",
         ]
     lines.append("")
 

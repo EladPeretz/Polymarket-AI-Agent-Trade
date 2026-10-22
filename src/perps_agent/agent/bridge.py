@@ -10,10 +10,11 @@ out through the same risk engine and execution paths every order uses
   happens to orders and positions, read from the ledger. ``next_event`` blocks
   until something is queued (or the timeout) and returns the events with a
   compact snapshot of each symbol involved and the session state.
-* **Autonomy (ADR-0003).** A ``discretionary`` proposal is L2. A playbook
-  proposal must match a live setup of that playbook, and the playbook version
-  must have passed the Gate 1 backtest screen; taking the setup as it stands
-  is L0, changing its prices is L1, and the size may not exceed the setup's cap.
+* **Autonomy (ADR-0003, ADR-0012).** A ``discretionary`` proposal is L2, the
+  primary mode. A playbook proposal must match a live setup of that playbook,
+  and the playbook version must have passed the Gate 1 backtest screen; taking
+  the setup as it stands is L0, changing its prices is L1, and the size may not
+  exceed the setup's cap.
   Screened versions are the owner-exempt initial ones and the Gate 1 passes
   (``backtest.screened_playbooks``); signals of any other version are context
   only and the agent trades them, if at all, as L2 (owner decision 2026-10-21).
