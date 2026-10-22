@@ -94,8 +94,9 @@ Weigh, for every idea:
 * where price is against the session open and VWAP;
 * where the session POC (point of control) and value area are. This matters
   most for reversion trades;
-* past events similar to this one, from your lessons (when the briefing has
-  them).
+* your lessons and record from the briefing: active lessons have repeated
+  evidence behind them, candidates are only hypotheses to watch, and the record
+  by read shows which of your reads have actually paid.
 
 # Trading style (owner's rules)
 

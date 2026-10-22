@@ -130,3 +130,17 @@ def test_prompt_lists_gate1_passes_as_screened(write_config, tmp_path, capsys):
     assert main(["prompt", "--config", str(path), "--date", "2026-10-20"]) == 0
     out = capsys.readouterr().out
     assert f"Screened (may trade as L0/L1): {tag}." in out
+
+
+def test_review_tools_run_on_local_results(write_config, tmp_path, capsys):
+    results = tmp_path / "results"
+    path = write_config(
+        {"risk": COMPLETE_RISK, "sim": COMPLETE_SIM, "agent": {"results_dir": str(results)}}
+    )
+    assert main(["review", "tools", "--config", str(path)]) == 0
+    names = {t["name"] for t in json.loads(capsys.readouterr().out)["result"]}
+    assert {"decisions", "review", "add_lesson", "record"} <= names
+    # No session journal yet: a clear error, not a crash.
+    assert main(["review", "decisions", "--config", str(path)]) == 1
+    assert "no session journal" in json.loads(capsys.readouterr().out)["error"]
+    assert main(["review", "lessons", "not json", "--config", str(path)]) == 2

@@ -265,8 +265,9 @@ Implementation (`agent/`, WP10).
   default, market for scalps and momentum, no stopping except the daily loss
   limit). The **briefing** is built each morning: window, symbols with their
   notes (`notes` in `config/symbols/*.yaml`), limits, Gate 1 status and how many
-  of the last five sessions had no trade. Lessons and calibration join it in
-  WP14. `perps-agent prompt` prints both.
+  of the last five sessions had no trade, the lessons notebook and the
+  agent's record by read and calibration (§3.13). `perps-agent prompt` prints
+  both.
 * **Session engine** (`app/session.py`): `perps-agent run` loads history and
   bars, starts the feed, simulator, execution, exit plans, trigger detector,
   journal and ledger (`results/<date>/`), serves the bridge, and runs until the
@@ -617,6 +618,25 @@ Implementation (`report/`, `app/results.py`, WP11).
 * **Never learnable:** risk-engine rules and values, the trading window and
   cutoffs, the guardian, the autonomy envelope, and code. These change only
   through owner-reviewed PRs.
+
+Implementation (`learning/`, WP14, first part).
+
+* **Daily review** (`perps-agent review <tool> '<json>'`, runbook step 4): works
+  on the local results after the session, no engine needed. `decisions` lists
+  the day's decisions with outcomes; `review` records a journal `review`
+  (scenario that played out, assumptions held, thesis held, notes).
+* **Lessons notebook** (`results/lessons/lessons.jsonl`, append-only events):
+  `add_lesson`, `add_evidence`, `retire_lesson`. A lesson is a candidate until
+  `learning.min_support` reviewed decisions support it with at most
+  `learning.max_contradiction_share` against; more contradiction retires it.
+  Evidence must name a decision in the local journals and counts once.
+  Published to the results branch with the days and fetched back when the
+  branch's copy is longer.
+* **Record** (`record`, and in the briefing): closed trades by `setup` key (the
+  agent's name for its read, ADR-0012) over the last `learning.record_sessions`
+  sessions, and calibration of the chosen scenario's probability.
+* Still to come: the weekly review, the `simulate` tool and agent-tuned
+  playbook parameters.
 
 ## 4. Daily lifecycle (paper mode)
 

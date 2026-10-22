@@ -40,6 +40,7 @@ from perps_agent.guardian import (
     Severity,
     append_incident,
 )
+from perps_agent.learning import ReviewDesk
 from perps_agent.log import configure_logging
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
 from perps_agent.report import write_report
@@ -104,6 +105,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "args", nargs="?", default=None, help="arguments as one JSON object ('-' reads stdin)"
     )
     agent.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
+    review = commands.add_parser(
+        "review",
+        help="the daily review: decisions, reviews and the lessons notebook (prints JSON)",
+    )
+    review.add_argument("tool", help="tool name; 'tools' lists them with their input schemas")
+    review.add_argument(
+        "args", nargs="?", default=None, help="arguments as one JSON object ('-' reads stdin)"
+    )
+    review.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
 
     prompt = commands.add_parser(
         "prompt", help="print the agent's system prompt and today's briefing"
@@ -175,6 +186,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(args.config, args.rehearsal)
     if args.command == "agent":
         return _agent(args.config, args.tool, args.args)
+    if args.command == "review":
+        return _review(args.config, args.tool, args.args)
     if args.command == "prompt":
         return _prompt(args.config, args.date)
     if args.command == "config-check":
@@ -395,6 +408,29 @@ def _agent(path: Path, tool: str, raw: str | None) -> int:
     except TransportError as error:
         print(json.dumps({"ok": False, "error": str(error)}))
         return 1
+    print(json.dumps(answer, indent=1, default=str))
+    return 0 if answer.get("ok") else 1
+
+
+def _review(path: Path, tool: str, raw: str | None) -> int:
+    try:
+        config = load_config(path)
+    except ConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    if raw == "-":
+        raw = sys.stdin.read()
+    try:
+        tool_args = json.loads(raw) if raw and raw.strip() else {}
+    except ValueError as error:
+        print(json.dumps({"ok": False, "error": f"arguments are not valid JSON: {error}"}))
+        return 2
+    if not isinstance(tool_args, dict):
+        print(json.dumps({"ok": False, "error": "arguments must be one JSON object"}))
+        return 2
+    today = utc_now().astimezone(config.session.zone).date()
+    desk = ReviewDesk(config, TradingCalendar(config.session).exchange, today=today)
+    answer = desk.call(tool, tool_args)
     print(json.dumps(answer, indent=1, default=str))
     return 0 if answer.get("ok") else 1
 

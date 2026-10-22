@@ -311,6 +311,19 @@ class BacktestConfig(_Model):
     holdout_days: Annotated[int, Field(ge=0, le=90)] = 21
 
 
+class LearningConfig(_Model):
+    """The learning loop's evidence rules (ADR-0010). Defined in ``main``; not learnable."""
+
+    # A lesson is used in decisions (active) once this many reviewed decisions support it ...
+    min_support: Annotated[int, Field(ge=2, le=20)] = 3
+    # ... and at most this share of its evidence contradicts it. More than that retires it.
+    max_contradiction_share: Annotated[Decimal, Field(ge=0, le=Decimal("0.5"))] = Decimal("0.34")
+    # Sessions the briefing's record by read and calibration cover.
+    record_sessions: Annotated[int, Field(ge=5, le=60)] = 20
+    # Lessons listed in the briefing, per status (active, candidate).
+    briefing_lessons: Annotated[int, Field(ge=1, le=50)] = 12
+
+
 class ResultsConfig(_Model):
     """Publishing ``results/<date>/`` to the results branch (ADR-0006)."""
 
@@ -369,6 +382,7 @@ class AppConfig(_Model):
     execution: ExecutionConfig = ExecutionConfig()
     guardian: GuardianConfig = GuardianConfig()
     backtest: BacktestConfig = BacktestConfig()
+    learning: LearningConfig = LearningConfig()
     results: ResultsConfig = ResultsConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
