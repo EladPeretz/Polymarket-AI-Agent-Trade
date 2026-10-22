@@ -42,6 +42,7 @@ from perps_agent.execution import ExecutionEngine, SimBackend
 from perps_agent.execution.plans import ExitPlanManager
 from perps_agent.guardian import INCIDENTS_FILE, Guardian, IncidentLog, JsonlIncidentSink
 from perps_agent.journal import Journal, JsonlJournalSink, TriggerKind, journal_path
+from perps_agent.learning import build_record, open_lessons
 from perps_agent.ledger import LEDGER_FILE, JsonlLedgerSink, Ledger
 from perps_agent.market import MarketFeed, MarketSnapshot, Recorder
 from perps_agent.report import EQUITY_FILE, EquitySample, JsonlEquitySink, write_report
@@ -56,6 +57,7 @@ from perps_agent.strategy import (
     build_features,
     load_history,
 )
+from perps_agent.strategy.history import prior_sessions
 from perps_agent.strategy.playbooks import Playbook, PlaybookContext, Setup, evaluate_all
 from perps_agent.strategy.snapshot import LOOKBACK
 from perps_agent.venue import (
@@ -325,13 +327,18 @@ def briefing_for(
     playbooks: Sequence[Playbook[Any]],
     screened: Sequence[str] = (),
 ) -> str:
+    results_dir = Path(config.agent.results_dir)
     return build_briefing(
         config,
         day=day,
         window=calendar.trading_window(day),
         playbooks=playbooks,
         screened=screened,
-        activity=recent_activity(Path(config.agent.results_dir), calendar.exchange, day),
+        activity=recent_activity(results_dir, calendar.exchange, day),
+        lessons=open_lessons(results_dir, config.learning),
+        record=build_record(
+            results_dir, prior_sessions(calendar.exchange, day, config.learning.record_sessions)
+        ),
     )
 
 

@@ -128,6 +128,13 @@ backtest:
   review_sample: 10                 # trades listed per playbook for review
   holdout_days: 21                  # last days reported apart; tune only on the days before
 
+# Learning loop (docs/architecture/overview.md §3.13, ADR-0010). Not learnable.
+learning:
+  min_support: 3                    # reviewed decisions supporting a lesson before it is used
+  max_contradiction_share: 0.34     # above this share of contradicting evidence it is retired
+  record_sessions: 20               # sessions the briefing's record by read covers
+  briefing_lessons: 12              # lessons listed in the briefing, per status
+
 # Guardian (docs/architecture/overview.md §3.10). Not learnable (ADR-0010).
 guardian:
   kill_switch: false                # true: close everything, no entries, every session

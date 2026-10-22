@@ -125,6 +125,10 @@ class Journal:
             journal._entries.append(entry)
         return journal
 
+    def attach(self, sink: Callable[[JournalEntry], None]) -> None:
+        """Send entries recorded from now on to ``sink`` (a journal rebuilt from a file)."""
+        self._sink = sink
+
     # --- Recording ---
 
     def record(self, entry: JournalEntry) -> JournalEntry:

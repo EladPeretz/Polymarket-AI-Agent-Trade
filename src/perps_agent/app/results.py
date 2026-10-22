@@ -9,17 +9,19 @@ push) with 2, 4, 8 ... seconds between attempts. Publishing every local day is
 idempotent: a day already on the branch adds nothing, so the next session
 retries whatever an earlier one failed to publish.
 
-The backtest's Gate 1 records (``gate1/``) and reports (``backtests/``) are
-published with them, file by file: a file on the branch is updated, never
-removed, so a session that has not fetched them cannot delete them.
+The backtest's Gate 1 records (``gate1/``) and reports (``backtests/``) and the
+lessons notebook (``lessons/``) are published with them, file by file: a file
+on the branch is updated, never removed, so a session that has not fetched
+them cannot delete them.
 
 Only ``.jsonl``, ``.json`` and ``.md`` files are published, and known secret
 values are replaced in them first (overview §7).
 
 :func:`fetch_results` copies recent days from the branch into the local
 results directory (for the briefing's recent activity), never overwriting a
-day that exists locally, and the Gate 1 records that are missing locally or
-newer on the branch (for the session's screened playbooks).
+day that exists locally, the Gate 1 records that are missing locally or
+newer on the branch (for the session's screened playbooks), and the lessons
+notebook when the branch's copy has more events.
 """
 
 import io
@@ -37,6 +39,7 @@ from pathlib import Path, PurePosixPath
 
 from perps_agent.backtest import BACKTESTS_DIR, GATE1_DIR
 from perps_agent.config.models import ResultsConfig
+from perps_agent.learning.lessons import LESSONS_DIR, LESSONS_FILE
 from perps_agent.log import REDACTED
 
 log = logging.getLogger(__name__)
@@ -45,7 +48,7 @@ log = logging.getLogger(__name__)
 BRANCH_DIR = "results"
 PUBLISHED_SUFFIXES = (".jsonl", ".json", ".md")
 # Directories next to the days, published file by file (see the module docstring).
-SHARED_DIRS = (GATE1_DIR, BACKTESTS_DIR)
+SHARED_DIRS = (GATE1_DIR, BACKTESTS_DIR, LESSONS_DIR)
 _EMPTY_TREE_ARGS = ("read-tree", "--empty")
 # Results commits are made by the bot, whoever runs the session.
 _IDENTITY = {
@@ -133,6 +136,7 @@ def fetch_results(
     if tip is None:
         return []
     _fetch_gate1(git, tip, results_dir)
+    _fetch_lessons(git, tip, results_dir)
     listing = git.run("ls-tree", "--name-only", f"{tip}:{BRANCH_DIR}").stdout.decode().split()
     remote_days = []
     for name in listing:
@@ -169,6 +173,22 @@ def _fetch_gate1(git: "_Git", tip: str, results_dir: Path) -> None:
             continue
         local_dir.mkdir(parents=True, exist_ok=True)
         local.write_bytes(remote)
+
+
+def _fetch_lessons(git: "_Git", tip: str, results_dir: Path) -> None:
+    """The notebook is append-only: take the branch's copy when it has more events."""
+    listing = git.run("ls-tree", "--name-only", f"{tip}:{BRANCH_DIR}").stdout.decode().split()
+    if LESSONS_DIR not in listing:
+        return
+    names = git.run("ls-tree", "--name-only", f"{tip}:{BRANCH_DIR}/{LESSONS_DIR}").stdout
+    if LESSONS_FILE not in names.decode().split():
+        return
+    remote = git.run("show", f"{tip}:{BRANCH_DIR}/{LESSONS_DIR}/{LESSONS_FILE}").stdout
+    local = results_dir / LESSONS_DIR / LESSONS_FILE
+    if local.exists() and len(local.read_bytes().splitlines()) >= len(remote.splitlines()):
+        return
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(remote)
 
 
 def _run_at(data: bytes) -> str:

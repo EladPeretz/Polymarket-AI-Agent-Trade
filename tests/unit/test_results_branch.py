@@ -193,3 +193,22 @@ def test_fetch_results_brings_missing_and_newer_gate1_records(repo, tmp_path):
     fresh = tmp_path / "fresh"
     fetch_results(fresh, config=CONFIG, repo=repo)
     assert sorted(p.name for p in (fresh / "gate1").iterdir()) == ["a@1.x.json", "b@1.y.json"]
+
+
+def test_the_lessons_notebook_is_published_and_the_longer_copy_fetched(repo, tmp_path):
+    notebook = repo / "results" / "lessons" / "lessons.jsonl"
+    notebook.parent.mkdir(parents=True)
+    notebook.write_text('{"n": 1}\n{"n": 2}\n')
+    _publish(repo, [])
+    assert "results/lessons/lessons.jsonl" in _branch_files(repo)
+
+    fresh = tmp_path / "fresh"
+    fetch_results(fresh, config=CONFIG, repo=repo)
+    assert (fresh / "lessons" / "lessons.jsonl").read_text() == notebook.read_text()
+
+    # A local notebook with more events than the branch's is kept.
+    ahead = tmp_path / "ahead" / "lessons" / "lessons.jsonl"
+    ahead.parent.mkdir(parents=True)
+    ahead.write_text('{"n": 1}\n{"n": 2}\n{"n": 3}\n')
+    fetch_results(tmp_path / "ahead", config=CONFIG, repo=repo)
+    assert len(ahead.read_text().splitlines()) == 3

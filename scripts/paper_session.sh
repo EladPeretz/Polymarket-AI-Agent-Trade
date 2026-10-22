@@ -52,7 +52,7 @@ start() {
   fi
 
   # Past days for the briefing's recent activity. Not fatal: the first day has none.
-  "$BIN" fetch-results --days 10 || say "warning: could not fetch past results"
+  "$BIN" fetch-results --days 20 || say "warning: could not fetch past results"
 
   mkdir -p data
   nohup "$BIN" run "$@" >"$LOG" 2>&1 &

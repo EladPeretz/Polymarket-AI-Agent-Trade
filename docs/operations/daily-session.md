@@ -33,8 +33,8 @@ engine refuses any other mode, and live trading never runs in a cloud session
 scripts/paper_session.sh start
 ```
 
-It installs the package, runs `perps-agent preflight`, copies the last ten days
-of results back from `paper-results` (for the briefing), starts the engine in the
+It installs the package, runs `perps-agent preflight`, copies the last 20 days
+of results and the lessons notebook back from `paper-results` (for the briefing), starts the engine in the
 background (`perps-agent run`, log in `data/engine.log`) and waits until the
 agent's tools answer.
 
@@ -108,10 +108,34 @@ publish`, retried on its own). Exit 1 means the publish failed; the failure is
 recorded as a `publish_failed` incident and the next session retries it. Run
 `finish` once more after a minute before giving up.
 
+### Daily review
+
+After `finish`, review the day as the trader, from the local results (no
+engine needed). Call the review tools as
+`.venv/bin/perps-agent review <tool> '<json>'`; `review tools` lists them.
+
+1. `review decisions` lists today's decisions with their outcomes.
+2. For every entry and every stand-aside, call `review` once: which scenario
+   played out (`realized_scenario`, or null if none did), which of its
+   assumptions held, whether the thesis held, and a short note on what the
+   market was really doing.
+3. `review lessons` shows the notebook. For each lesson a decision bears on,
+   `add_evidence` with `supports` true or false. Be strict: evidence is a
+   decision that tested the lesson, not one that happened nearby.
+4. Add at most three new candidate lessons with `add_lesson`: concrete,
+   checkable statements about how participants behaved (who was forced to act,
+   how price reacted), tagged with the `setup` key, regime or symbol they are
+   about, with today's decisions as their first evidence. Retire a lesson with
+   `retire_lesson` when today showed it no longer fits the market.
+5. Run `scripts/paper_session.sh finish` again: it publishes the reviews and
+   the notebook.
+
+Skip the review only if no session ran today. If a review tool fails, note it
+for step 5 and carry on.
+
 ## 5. Wrap up
 
 Read `results/<date>/report.md` and end the session with a short summary (at
 most ten lines): trades and net PnL, incidents, anything that did not work
-(start-up, tools, engine, publish), and what you would want the owner to look at.
-The daily review and lessons notebook arrive with WP14; until then this summary
-is the review.
+(start-up, tools, engine, publish, review), the lessons you added or retired,
+and what you would want the owner to look at.

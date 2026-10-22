@@ -3,9 +3,9 @@
 The system prompt (``prompts/system.md``) is fixed: the role, the decision
 process and the owner's trading style. The briefing is built each morning
 from the config and the results store: the day's window, the symbols and
-their notes, the risk limits, the playbooks' Gate 1 status and how many recent
-sessions had no trade (owner rule: at most about one a week). Lessons and
-calibration statistics join it with the learning loop (WP14).
+their notes, the risk limits, the playbooks' Gate 1 status, how many recent
+sessions had no trade (owner rule: at most about one a week), the lessons
+notebook and the agent's record by read and calibration (ADR-0010).
 """
 
 from collections.abc import Iterable, Sequence
@@ -18,6 +18,7 @@ from typing import Any
 from perps_agent.calendar import NyseCalendar, TradingWindow
 from perps_agent.config.models import AppConfig
 from perps_agent.journal import Action, Journal, journal_path, load_journal
+from perps_agent.learning import Lesson, LessonBook, LessonStatus, Record
 from perps_agent.strategy.history import prior_sessions
 from perps_agent.strategy.playbooks import Playbook
 
@@ -62,6 +63,8 @@ def build_briefing(
     playbooks: Sequence[Playbook[Any]],
     screened: Iterable[str],
     activity: Sequence[SessionActivity],
+    lessons: LessonBook | None = None,
+    record: Record | None = None,
 ) -> str:
     zone = config.session.zone
     screened = frozenset(screened)
@@ -132,6 +135,7 @@ def build_briefing(
         "",
         "Playbook setups are other traders' textbook patterns: context about what many "
         "participants are watching, not instructions. You are the trader.",
+        "",
     ]
     passed = [p for p in playbooks if p.tag in screened]
     if passed:
@@ -171,13 +175,79 @@ def build_briefing(
         ]
     lines.append("")
 
-    lines += [
-        "## Lessons and calibration",
-        "",
-        "None yet: the learning loop (lessons notebook, calibration statistics and the "
-        "`simulate` tool) arrives with WP14.",
-    ]
+    lines += _learning_lines(config, lessons, record)
     return "\n".join(lines) + "\n"
+
+
+def _learning_lines(config: AppConfig, book: LessonBook | None, record: Record | None) -> list[str]:
+    rules = config.learning
+    shown = rules.briefing_lessons
+    lines = ["## Lessons and your record", ""]
+    active = book.by_status(LessonStatus.ACTIVE) if book else []
+    candidates = book.by_status(LessonStatus.CANDIDATE) if book else []
+    if not active and not candidates:
+        lines += [
+            "No lessons yet. They come from your daily reviews: a lesson starts as a "
+            f"candidate and is active once {rules.min_support} reviewed decisions support it.",
+            "",
+        ]
+    if active:
+        lines += [
+            f"Active (at least {rules.min_support} reviewed decisions support each, little "
+            "against). Use them, but today's market overrules them when it disagrees:",
+            "",
+        ]
+        lines += [_lesson_line(lsn) for lsn in active[:shown]]
+        lines.append("")
+    if candidates:
+        lines += ["Candidates (unproven: watch for evidence, do not rely on them):", ""]
+        lines += [_lesson_line(lsn) for lsn in candidates[:shown]]
+        lines.append("")
+    if record is None or not record.sessions:
+        lines.append("No earlier session journals for a record yet.")
+        return lines
+    lines.append(f"Results by read over the last {len(record.sessions)} sessions:")
+    lines.append("")
+    if record.reads:
+        lines += [
+            "| Read (`setup`) | Trades | Net R | Average R | Win rate |",
+            "| - | - | - | - | - |",
+        ]
+        lines += [
+            f"| {s.setup} | {s.trades} | {s.net_r:+.2f} | {s.average_r:+.2f} "
+            f"| {s.wins / s.trades:.0%} |"
+            for s in record.reads
+        ]
+    else:
+        lines.append("No closed trades yet.")
+    if record.calibration:
+        lines += [
+            "",
+            "Calibration (probability you gave the chosen scenario, and how often it played out):",
+            "",
+        ]
+        lines += [
+            f"* {b.label}: {b.decisions} decisions, stated {b.stated:.0%} on average, "
+            f"played out {b.realized:.0%}"
+            for b in record.calibration
+        ]
+    if record.unreviewed:
+        lines += ["", f"{record.unreviewed} entries in these sessions were never reviewed."]
+    return lines
+
+
+def _lesson_line(lesson: Lesson) -> str:
+    added = lesson.added
+    tags = [
+        f"{name} {value}"
+        for name in ("setup", "regime", "symbol")
+        if (value := getattr(added, name))
+    ]
+    tag_text = f"{', '.join(tags)}; " if tags else ""
+    return (
+        f"* `{lesson.lesson_id}` {added.statement} ({tag_text}{lesson.supports} for, "
+        f"{lesson.contradicts} against)"
+    )
 
 
 def _pct(value: Any) -> str:
