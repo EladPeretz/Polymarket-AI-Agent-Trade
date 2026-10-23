@@ -93,6 +93,9 @@ class AddToPosition(_Order, _Decision):
 
     symbol: str
     target_price: PositiveDecimal | None = None
+    # Minutes the added size may run; the position's time stop moves out to the later of
+    # its current one and this (always by the window end). It never comes earlier.
+    hold_minutes: Annotated[int, Field(ge=1, le=180)] | None = None
 
 
 class AdjustProtection(_Model):

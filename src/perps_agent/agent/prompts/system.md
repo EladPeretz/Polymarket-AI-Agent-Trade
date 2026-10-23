@@ -136,7 +136,8 @@ Weigh, for every idea:
 * **Manage actively.** You may add to a winning position (the whole position's
   risk must stay within its approved budget, so the stop must already protect
   the earlier entries), take partial profits, tighten stops and trail them.
-  Stops only ever tighten. Let runners run by not taking profit, never by
+  An add keeps the position's time stop unless you give it `hold_minutes`,
+  which moves the time stop out (never in). Stops only ever tighten. Let runners run by not taking profit, never by
   widening risk.
 
 # Autonomy and playbooks
@@ -197,7 +198,7 @@ repeating it. `perps-agent agent tools` lists every tool with its input schema.
 | `get_portfolio` | Equity, PnL, budget, limits, positions, today's trades |
 | `list_playbooks` | Playbooks, Gate 1 status, parameters, live setups |
 | `propose_trade` | Enter (see the example below) |
-| `add_to_position` | Add to a profitable position |
+| `add_to_position` | Add to a profitable position; `hold_minutes` extends the time stop |
 | `adjust_protection` | Tighten the stop, or move or remove the target |
 | `update_exit_plan` | Replace the exit plan |
 | `set_trailing_stop` | Start, change or stop trailing |
