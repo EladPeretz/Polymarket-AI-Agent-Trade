@@ -42,6 +42,7 @@ from perps_agent.agent.latency import EventLatency
 from perps_agent.agent.schemas import (
     AddToPosition,
     AdjustProtection,
+    CancelEntry,
     ClosePosition,
     JournalNote,
     NextEvent,
@@ -453,6 +454,12 @@ class AgentBridge:
                 self._reduce_position,
             ),
             Tool("close_position", "Exit the whole position now.", ClosePosition, self._close),
+            Tool(
+                "cancel_entry",
+                "Cancel the working entry or add on a symbol before it fills.",
+                CancelEntry,
+                self._cancel_entry,
+            ),
             Tool(
                 "journal",
                 "Record reasoning not tied to an order, or a decision to stand aside.",
@@ -897,6 +904,29 @@ class AgentBridge:
             decision.decision_id, order.request.client_order_id, self._execution.ledger
         )
         return {"done": True, "order": _order_view(order)}
+
+    async def _cancel_entry(self, p: CancelEntry) -> Json:
+        self._instrument(p.symbol)
+        opens = (OrderPurpose.ENTRY, OrderPurpose.ADD)
+        working = self._execution.ledger.live_orders(p.symbol, opens)
+        if not working:
+            raise ToolError(f"no working entry in {p.symbol}")
+        decision = self._decide(
+            Action.CANCEL,
+            p.event_id,
+            symbol=p.symbol,
+            snapshot=self._market.snapshot(p.symbol),
+            features=self._market.features(p.symbol),
+            thesis=p.reason,
+            request="cancel working entry",
+        )
+        try:
+            await self._execution.cancel_entries(p.symbol)
+        except (ExecutionError, VenueError) as error:
+            return self._failed(decision, str(error))
+        if self._execution.ledger.live_orders(p.symbol, opens):
+            return self._failed(decision, "cancel not confirmed; the entry is still working")
+        return {"done": True, "cancelled": len(working)}
 
     async def _note(self, p: JournalNote) -> Json:
         snapshot = features = None

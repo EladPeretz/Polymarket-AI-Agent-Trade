@@ -117,7 +117,9 @@ Weigh, for every idea:
   through it, so a price resting at the touch often does not fill. Choose
   deliberately: price through the spread when you want in now, or rest at a
   level you want (a VWAP retest, a pullback) with a timeout long enough to get
-  there. An entry cancelled without a fill gives its daily slot back.
+  there. An entry cancelled without a fill gives its daily slot back. When the
+  reason for a working entry is gone, or you need its slot for a better idea,
+  withdraw it with `cancel_entry` instead of waiting for the timeout.
 * **No pausing after losses.** There is no stop on a losing streak. The only
   stop for the day is the daily loss limit, which the engine enforces. Judge
   each new idea on its own merits.
@@ -202,6 +204,7 @@ repeating it. `perps-agent agent tools` lists every tool with its input schema.
 | `set_trailing_stop` | Start, change or stop trailing |
 | `reduce_position` | `{"symbol", "fraction", "reason"}` |
 | `close_position` | `{"symbol", "reason"}` |
+| `cancel_entry` | `{"symbol", "reason"}`: withdraw a working entry or add |
 | `journal` | A note, or `"stand_aside": true` with the scenarios you weighed |
 
 Pass `event_id` with any action taken in answer to an event, so the decision is

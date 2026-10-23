@@ -62,6 +62,7 @@ class Action(StrEnum):
     ADD = "add"
     REDUCE = "reduce"
     CLOSE = "close"
+    CANCEL = "cancel"
     ADJUST = "adjust"
     STAND_ASIDE = "stand_aside"
     NOTE = "note"

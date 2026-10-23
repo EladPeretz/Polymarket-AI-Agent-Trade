@@ -201,6 +201,7 @@ uses a small tool surface served by the engine:
 | `add_to_position(symbol, intent)` | Add size to a profitable position (same risk checks as a new trade, plus §3.7 rule 10). Its optional hold time can move the position's time stop later, never earlier |
 | `reduce_position(symbol, fraction, reason)` | Partial exit |
 | `close_position(symbol, reason)` | Exit now |
+| `cancel_entry(symbol, reason)` | Withdraw a working entry or add before it fills |
 | `journal(note)` | Record reasoning that isn't tied to an action |
 
 `TradeIntent` schema (validated before risk):
