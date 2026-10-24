@@ -4,8 +4,8 @@ Status: proposed (Phase 1) · Last updated: 2026-10-19
 
 Each phase ends with an explicit decision: **merge and continue**, or **fall back**
 to the previous tagged version. The criteria are fixed here, before results exist,
-so the decision is objective. Values marked *TBD* depend on capital and are set
-when the trading framework is built. They must be set before the gate that uses them.
+so the decision is objective. The capital-dependent values were set by the owner on
+2026-10-20.
 
 ## Gate 1 — Playbook screen (before a playbook version enters paper trading)
 
@@ -29,6 +29,20 @@ version that fails stays out of paper trading, or runs at `L0` (filter) only.
 Trade counts are reported, not required: a thin sample is acceptable because paper
 trading is the main evidence.
 
+`perps-agent backtest` runs the screen (overview §5). The three measurable
+criteria are automated, the regime check as "no entry outside the declared
+regimes", and a version with no trade in its target sessions fails. The trigger
+review is done by hand from the sample in each record
+(`results/gate1/<tag>.json`, `"review": "pending"`); a version whose automated
+criteria pass is screened (may trade as L0/L1) without waiting for it.
+
+**Exemption (owner decision, 2026-10-21):** the six initial playbook versions
+(`agent.exempt_playbooks` in `config/default.yaml`) trade as L0/L1 without
+Gate 1, so paper trading can use them before the backtest runner (WP13) exists.
+The exemption is by version tag: any change to a playbook's logic or parameters
+makes a new tag, which must pass Gate 1. `perps-agent config-check` flags an
+exempt tag that no longer matches a playbook.
+
 ## Gate 2 — Paper trading → live pilot (end of Phase 3 simulation)
 
 All of the following, measured on paper trading with the live data feed:
@@ -38,7 +52,7 @@ All of the following, measured on paper trading with the live data feed:
 | Duration | ≥ 20 trading days (playbook/parameter changes don't reset the count; changes to risk, execution or guardian code restart the safety criteria) |
 | Net PnL after fees and funding | > 0 |
 | Profit factor (gross wins ÷ gross losses) | > 1.2 |
-| Maximum drawdown | < *TBD* % of paper equity |
+| Maximum drawdown (peak to trough) | < 8% of paper equity |
 | Risk-rule violations (an order reached execution that should have been rejected) | **0** |
 | Unexplained ledger mismatches / unreconciled state | **0** |
 | Window close-outs completed by 12:35 | 100% of days |
@@ -49,11 +63,11 @@ rate, average win/loss, average agent latency per event, and LLM usage.
 
 ## Gate 3 — Live pilot → normal live operation
 
-Run on the VPS with small capital (*TBD*) for ≥ 10 trading days:
+Run on the VPS with small capital (about 500 pUSD) for ≥ 10 trading days:
 
 * all Gate 2 safety criteria hold (0 violations, 0 mismatches, 100% close-outs),
-* live fills and slippage within a *TBD* tolerance of the paper simulator's
-  model for comparable trades (validates the simulator),
+* live fills average within 3 bp of the paper simulator's model for comparable
+  orders (validates the simulator),
 * no venue-side incident (rejected orders from validation errors, auth
   failures, geo blocks).
 

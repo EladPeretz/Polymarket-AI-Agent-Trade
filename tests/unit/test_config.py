@@ -12,8 +12,8 @@ from perps_agent.config import (
     readiness_problems,
     require_ready,
 )
-from perps_agent.config.models import SessionConfig
-from tests.conftest import COMPLETE_RISK, REPO_ROOT
+from perps_agent.config.models import MarketDataConfig, SessionConfig, SimConfig
+from tests.conftest import COMPLETE_RISK, COMPLETE_SIM, REPO_ROOT
 
 LIVE_ENV_CREDS = {
     "PERPS_PROXY_ADDRESS": "0x0000000000000000000000000000000000000001",
@@ -25,14 +25,26 @@ LIVE_ENV_CREDS = {
 def test_repository_default_config_loads():
     config = load_config(REPO_ROOT / "config" / "default.yaml")
     assert config.mode is Mode.PAPER
-    assert config.enabled_symbols == ("NVDA-USD",)
+    assert config.enabled_symbols == (
+        "NVDA-USD",
+        "TSLA-USD",
+        "MSFT-USD",
+        "HOOD-USD",
+        "MSTR-USD",
+        "WTIOIL-USD",
+    )
     assert config.session.window_start == time(9, 30)
     assert config.session.hard_flat_deadline == time(12, 35)
     assert config.live.enabled is False
 
 
-def test_repository_default_config_is_not_ready_until_risk_is_set():
+def test_repository_default_config_is_ready_for_paper_without_credentials():
     config = load_config(REPO_ROOT / "config" / "default.yaml")
+    assert readiness_problems(config, load_secrets({}), {}) == []
+
+
+def test_config_is_not_ready_until_risk_is_set(write_config):
+    config = load_config(write_config({"sim": COMPLETE_SIM}))
     problems = readiness_problems(config, load_secrets({}), {})
     assert "risk.per_trade_risk_fraction is not set" in problems
     with pytest.raises(ConfigError):
@@ -40,8 +52,22 @@ def test_repository_default_config_is_not_ready_until_risk_is_set():
 
 
 def test_complete_paper_config_is_ready_without_credentials(write_config):
-    config = load_config(write_config({"risk": COMPLETE_RISK}))
+    config = load_config(write_config({"risk": COMPLETE_RISK, "sim": COMPLETE_SIM}))
     assert readiness_problems(config, load_secrets({}), {}) == []
+
+
+def test_paper_and_backtest_need_starting_collateral(write_config):
+    for mode in (Mode.PAPER, Mode.BACKTEST):
+        config = load_config(write_config({"risk": COMPLETE_RISK}), mode=mode)
+        assert readiness_problems(config, load_secrets({}), {}) == [
+            "sim.starting_collateral is not set"
+        ]
+
+
+def test_sim_defaults_are_tier_zero_fees():
+    sim = SimConfig()
+    assert (sim.taker_fee_rate, sim.maker_fee_rate) == (Decimal("0.0004"), Decimal("0.000125"))
+    assert sim.starting_collateral is None
 
 
 def test_yaml_floats_become_exact_decimals(write_config):
@@ -169,3 +195,11 @@ def test_secrets_never_appear_in_repr_or_dump():
         "proxy-secret-value",
         LIVE_ENV_CREDS["PERPS_PROXY_PRIVATE_KEY"],
     }
+
+
+def test_market_defaults_and_resubscribe_must_exceed_stale():
+    config = load_config(REPO_ROOT / "config" / "default.yaml")
+    assert config.market.stale_after_ms == 2_000
+    assert config.market.resubscribe_after_ms > config.market.stale_after_ms
+    with pytest.raises(ValidationError):
+        MarketDataConfig(stale_after_ms=5_000, resubscribe_after_ms=5_000)

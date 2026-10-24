@@ -1,0 +1,12 @@
+symbol: MSTR-USD
+enabled: true
+
+# Autonomy levels the agent may use on this symbol (ADR-0003).
+autonomy:
+  L0: true
+  L1: true
+  L2: true
+
+# Briefing notes for the agent (owner inputs, 2026-10-20).
+notes: >-
+  Trades as a leveraged bitcoin proxy, so watch BTC. Very high volatility. Liquidity sweeps have worked especially well here (owner's experience).

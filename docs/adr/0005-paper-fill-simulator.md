@@ -1,6 +1,6 @@
 # ADR-0005: Conservative in-house fill simulator for paper trading
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 

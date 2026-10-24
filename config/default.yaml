@@ -5,6 +5,11 @@ mode: paper
 
 symbols:
   - NVDA-USD
+  - TSLA-USD
+  - MSFT-USD
+  - HOOD-USD
+  - MSTR-USD
+  - WTIOIL-USD
 
 venue:
   api_url: https://api.perpetuals.polymarket.com
@@ -16,27 +21,134 @@ session:
   entry_cutoff: "12:15"
   window_end: "12:30"
   hard_flat_deadline: "12:35"
+  # Unscheduled NYSE closures not yet in the calendar, e.g. ["2026-01-09"].
+  extra_closures: []
 
+# Agent bridge (docs/architecture/overview.md §3.5, ADR-0011).
 agent:
   check_in_minutes: 15
-  next_event_timeout_seconds: 540
+  next_event_timeout_seconds: 540   # below the cloud session's 10-minute call cap
+  max_events_per_call: 10
+  socket_path: data/agent.sock      # the engine serves the agent's tools here
+  results_dir: results              # journals and ledgers by date (ADR-0006)
+  unscreened_playbook_signals: true # show pre-Gate 1 playbook signals as context (L2 only)
+  # Initial playbook versions that trade as L0/L1 without Gate 1 (owner decision,
+  # 2026-10-21). A changed playbook gets a new tag and needs the screen.
+  exempt_playbooks:
+    - vwap_reversion@1.489ebf32
+    - momentum_scalp@1.88b40392
+    - mean_reversion@1.fad55a30
+    - liquidity_sweep@1.0eaca9db
+    - trend_following@1.19635a47
+    - opening_flush@1.c8af2e86
+
+# Market data feed (docs/architecture/overview.md §3.2). Book and ticker frames
+# arrive every 100 ms; a longer silence marks the snapshot stale.
+market:
+  stale_after_ms: 2000
+  resubscribe_after_ms: 15000
+  check_interval_ms: 250
+  snapshot_depth: 10
+  recent_trades_seconds: 300
+  record: true
+  recording_dir: data/recordings   # git-ignored; raw recordings are not published
+
+# Features and regime labels (docs/architecture/overview.md §3.4). Not learnable.
+features:
+  opening_range_minutes: 15
+  profile_bucket_bp: 5              # volume-profile bucket width, bp of the session open
+  value_area_fraction: 0.7
+  realized_vol_minutes: 60          # 1-minute returns behind the expected move to 12:30
+  history_sessions: 10              # prior sessions for ticker profile and key levels
+  expansion_ratio: 1.3              # session range vs usual for the time elapsed
+  compressed_ratio: 0.7
+  trend_efficiency: 0.5             # net move / range for a trend
+  max_trend_vwap_crosses: 3
+  regime_min_minutes: 15            # no regime label before this
+  min_traded_minutes_share: 0.5     # fewer traded minutes: VWAP and profile time-weighted
+
+# Agent wake-ups besides playbook signals and the check-in (overview §3.4).
+triggers:
+  large_move_seconds: 60
+  large_move_sigma: 3               # × 1-minute volatility scaled to large_move_seconds
+  large_move_min_bp: 15             # and at least this many bp
+  large_move_range_fraction: 0.5    # no 1-minute volatility yet: at least this × the 15m range
+  large_move_cooldown_seconds: 300  # a symbol's next large moves wait this long ...
+  large_move_escalation: 2          # ... unless price went this many thresholds further
+  approaching_stop_fraction: 0.25   # share of the entry-to-stop distance left
+  approaching_target_fraction: 0.8  # share of the way to the target
+  time_stop_warning_minutes: 2
 
 # Risk rules (docs/architecture/overview.md §3.7). Capital-dependent values are
-# null until decided; the engine refuses to start while any are null.
+# set by the owner; the engine refuses to start while any are null.
 risk:
-  per_trade_risk_fraction: null     # fraction of equity risked per trade, e.g. 0.005
-  daily_loss_limit_fraction: null   # halt new entries at this daily loss, e.g. 0.02
-  max_leverage: null                # venue max for stock perps is 10x
-  max_position_notional: null       # pUSD
-  max_concurrent_positions: 1
-  max_trades_per_day: null
-  max_l2_trades_per_day: null
-  l2_risk_fraction: 0.5             # L2 trades use this share of the per-trade budget
-  min_stop_distance_bp: null
-  max_spread_bp: null
-  min_top_of_book_notional: null    # pUSD
-  liquidation_buffer_fraction: null # stop within this fraction of entry→liquidation distance
-  max_snapshot_age_ms: 2000
+  per_trade_risk_fraction: 0.007    # max fraction of equity risked per trade; the agent sizes 0-1 of it
+  daily_loss_limit_fraction: 0.03   # halt new entries at this daily loss
+  max_leverage: 10                  # venue max for stock perps is 10x
+  max_position_notional: 5000       # pUSD
+  max_concurrent_positions: 3
+  max_trades_per_day: 30            # owner, 2026-10-22
+  max_l2_trades_per_day: 30         # discretionary entries count only against the overall cap (owner, 2026-10-22)
+  l2_risk_fraction: 1               # discretionary (L2) trades use the full per-trade budget (owner, 2026-10-22)
+  min_stop_distance_bp: 20          # absolute stop floor
+  stop_floor_range_multiple: 1      # stop ≥ this × the symbol's recent 15-minute range (WP9)
+  max_spread_bp: 6
+  min_book_depth_notional: 1000     # pUSD resting on each side, within the band below
+  book_depth_band_bp: 25            # count book levels within this of each side's best price
+  liquidation_buffer_fraction: 0.5  # stop within this fraction of entry→liquidation distance
+  max_snapshot_age_ms: 2000         # also how long an approved verdict may wait to be sent
+  stop_slippage_bp: 5               # sizing counts this beyond the stop, plus fees
+  min_reward_risk: 1.3              # a target, if set, must be ≥ 1.3R away, costs included (owner, 2026-10-22)
+
+# Paper/backtest fill simulator (docs/architecture/overview.md §3.9). Fee rates
+# are tier 0 (venue research §8). Starting collateral is capital, set by the owner.
+sim:
+  latency_ms: 250
+  taker_fee_rate: 0.0004
+  maker_fee_rate: 0.000125
+  starting_collateral: 500          # pUSD
+
+# Order handling (docs/architecture/overview.md §3.8).
+execution:
+  entry_timeout_seconds: 120        # cancel a limit entry still working after this
+  max_entry_timeout_seconds: 900    # the agent may ask for up to this per entry
+  exit_slippage_bp: 50              # exits are reduce-only IOC limited this far through mark
+  trail_min_interval_seconds: 5     # engine-run trailing: at most one stop move per interval
+  trail_min_step_bp: 2              # ... and only by at least this much
+
+# Playbook backtest and Gate 1 screen (docs/architecture/go-no-go.md, ADR-0008).
+# Not learnable (ADR-0010).
+backtest:
+  window_days: 91                   # rolling window, calendar days before the run date
+  data_dir: data/backtest           # cached bars and funding (git-ignored)
+  max_concurrent_requests: 4
+  marketable_slippage_bp: 3         # marketable entries fill this far through the mark
+  min_expectancy_r: 0               # Gate 1: in-target net expectancy per trade, R
+  max_trade_share: 0.25             # Gate 1: no trade above this share of net PnL
+  review_sample: 10                 # trades listed per playbook for review
+  holdout_days: 21                  # last days reported apart; tune only on the days before
+
+# Learning loop (docs/architecture/overview.md §3.13, ADR-0010). Not learnable.
+learning:
+  min_support: 3                    # reviewed decisions supporting a lesson before it is used
+  max_contradiction_share: 0.34     # above this share of contradicting evidence it is retired
+  record_sessions: 20               # sessions the briefing's record by read covers
+  briefing_lessons: 12              # lessons listed in the briefing, per status
+
+# Guardian (docs/architecture/overview.md §3.10). Not learnable (ADR-0010).
+guardian:
+  kill_switch: false                # true: close everything, no entries, every session
+  kill_switch_file: data/KILL_SWITCH  # `perps-agent kill` creates it; latched for the session
+  agent_timeout_seconds: 600        # hold entries after this long without an agent tool call
+  stale_incident_seconds: 30        # stale data this long inside the window is an incident
+  reconcile_interval_seconds: 60    # ledger vs venue positions
+  equity_sample_seconds: 60         # equity samples for the daily report's drawdown
+
+# Results branch (ADR-0006): results/<date>/ is committed here, never to main.
+results:
+  branch: paper-results
+  remote: origin
+  push_attempts: 4
 
 # Live trading gate (ADR-0004). Must stay disabled outside the approved VPS.
 live:

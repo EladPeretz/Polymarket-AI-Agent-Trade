@@ -1,6 +1,6 @@
 # ADR-0003: Agent autonomy as a config-defined envelope
 
-Status: Proposed · Date: 2026-10-19
+Status: Accepted · Date: 2026-10-19
 
 ## Context
 
@@ -16,7 +16,8 @@ Autonomy is expressed as levels, enabled and capped per symbol in config:
 * `L1` playbook: the agent picks a playbook, direction, size and stop/target
   within playbook limits, or stays out.
 * `L2` discretionary: the agent proposes trades not tied to a playbook, with a
-  reduced risk budget and a daily count limit.
+  configurable share of the risk budget and a daily count limit (since
+  ADR-0012: the full budget, and the primary mode).
 
 Every trade is tagged with its level and playbook. Reports attribute results per level.
 

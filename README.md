@@ -37,6 +37,53 @@ python3 -m venv .venv
 .venv/bin/perps-agent config-check --strict   # fails unless ready to run
 ```
 
+Stream live market data for the enabled symbols and record it to
+`data/recordings/` (read-only, no credentials; needs WebSocket access):
+
+```bash
+.venv/bin/perps-agent record --seconds 60   # prints the final snapshots
+```
+
+Print the trading window for a date from the local NYSE calendar (exits 3 on
+non-trading days):
+
+```bash
+.venv/bin/perps-agent calendar --date 2026-11-27   # early close: window capped at 13:00
+```
+
+Run today's paper session (engine, simulator and the agent's tool server), and
+call the agent's tools from another shell (ADR-0011):
+
+```bash
+.venv/bin/perps-agent run                     # paper mode only; exits 3 on non-trading days
+.venv/bin/perps-agent prompt                  # the agent's system prompt and today's briefing
+.venv/bin/perps-agent agent tools             # tools and their input schemas
+.venv/bin/perps-agent agent next_event '{"timeout_seconds": 60}'
+.venv/bin/perps-agent agent get_snapshot '{"symbol": "NVDA-USD"}'
+```
+
+After the session: the daily report, and the results branch (ADR-0006). The
+guardian's kill switch stops a running session:
+
+```bash
+.venv/bin/perps-agent report --date 2026-10-20   # rebuild results/<date>/report.md and .json
+.venv/bin/perps-agent publish                    # commit every local day to paper-results and push
+.venv/bin/perps-agent fetch-results --days 10    # copy recent days back from paper-results
+.venv/bin/perps-agent kill --reason "..."        # close everything, no new entries this session
+.venv/bin/perps-agent kill --clear               # remove the switch before the next session
+```
+
+The daily scheduled session (WP12) follows
+[`docs/operations/daily-session.md`](docs/operations/daily-session.md); setup is in
+[`docs/operations/scheduling.md`](docs/operations/scheduling.md):
+
+```bash
+.venv/bin/perps-agent preflight               # go / no-go before the session (exit 3: nothing today)
+scripts/paper_session.sh start                # install, preflight, fetch results, start the engine
+scripts/paper_session.sh finish               # wait for the engine to end, publish the results
+.venv/bin/perps-agent run --rehearsal 15      # the full session on a 15-minute window starting now
+```
+
 Read-only venue connectivity check (never places orders):
 
 ```bash

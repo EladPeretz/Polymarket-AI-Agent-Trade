@@ -1,0 +1,101 @@
+{
+ "data": [
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792497600053
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792494000054
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792490400074
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792486800036
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792483200049
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792479600033
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792476000030
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792472400035
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792468800034
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792465200032
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792461600030
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792458000028
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792454400068
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792450800025
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792447200047
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792443600046
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792440000056
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792436400028
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792432800048
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792429200051
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792425600081
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792422000033
+  },
+  {
+   "funding_rate": "0.00000625",
+   "timestamp": 1792418400082
+  },
+  {
+   "funding_rate": "0.00000929",
+   "timestamp": 1792414800060
+  }
+ ],
+ "more": false
+}

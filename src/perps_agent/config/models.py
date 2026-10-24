@@ -1,7 +1,7 @@
 """Typed configuration. Files hold no secrets; credentials come from the environment."""
 
 import re
-from datetime import time
+from datetime import date, time
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Self
@@ -50,6 +50,9 @@ class SessionConfig(_Model):
     entry_cutoff: time = time(12, 15)
     window_end: time = time(12, 30)
     hard_flat_deadline: time = time(12, 35)
+    # Unscheduled NYSE closures (e.g. a national day of mourning) not yet in the
+    # calendar module, as quoted "YYYY-MM-DD" strings.
+    extra_closures: tuple[date, ...] = ()
 
     @field_validator(
         "window_start", "entry_cutoff", "window_end", "hard_flat_deadline", mode="before"
@@ -95,6 +98,51 @@ class AgentConfig(_Model):
     check_in_minutes: Annotated[int, Field(ge=1, le=60)] = 15
     # Kept below the cloud session's per-call time cap (10 minutes).
     next_event_timeout_seconds: Annotated[int, Field(ge=10, le=540)] = 540
+    # Most events one ``next_event`` call returns; the rest wait for the next call.
+    max_events_per_call: Annotated[int, Field(ge=1, le=50)] = 10
+    # The engine serves the agent's tools on this Unix socket (ADR-0011).
+    socket_path: str = "data/agent.sock"
+    # Journals, ledgers and reports by date (ADR-0006); the briefing reads past days.
+    results_dir: str = "results"
+    # Playbooks that have not passed the Gate 1 screen still wake the agent and
+    # appear in snapshots, labelled unscreened; the agent may act on them only as
+    # L2 (discretionary) trades. Owner decision, 2026-10-21.
+    unscreened_playbook_signals: bool = True
+    # Playbook versions (tags ``<id>@<version>.<hash>``) treated as screened
+    # without Gate 1: the six initial versions. Any change makes a new tag,
+    # which needs the screen. Owner decision, 2026-10-21.
+    exempt_playbooks: tuple[str, ...] = ()
+    # An entry rejected only for a thin book or a wide spread is evaluated again
+    # on fresh snapshots, up to this many times this far apart, before the
+    # rejection goes back to the agent. Owner decision, 2026-10-21.
+    market_recheck_attempts: Annotated[int, Field(ge=0, le=20)] = 6
+    market_recheck_interval_ms: Annotated[int, Field(ge=0, le=2_000)] = 500
+
+
+class MarketDataConfig(_Model):
+    """Market data feed and recorder (overview §3.2).
+
+    Book and ticker frames arrive every 100 ms (measured 2026-10-20), so a quiet
+    gap of ``stale_after_ms`` means the feed is broken, not that the market is
+    calm. BBO and trades only arrive on change and are never required.
+    """
+
+    stale_after_ms: Annotated[int, Field(ge=200)] = 2_000
+    # No frame at all for this long: close and reopen the subscription.
+    resubscribe_after_ms: Annotated[int, Field(ge=1_000)] = 15_000
+    check_interval_ms: Annotated[int, Field(ge=10, le=5_000)] = 250
+    # Book levels per side in a snapshot. WebSocket book frames carry 20.
+    snapshot_depth: Annotated[int, Field(ge=1, le=20)] = 10
+    recent_trades_seconds: Annotated[int, Field(ge=1, le=3_600)] = 300
+    record: bool = True
+    # Raw recordings stay local (git-ignored); see ADR-0006.
+    recording_dir: str = "data/recordings"
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.resubscribe_after_ms <= self.stale_after_ms:
+            raise ValueError("resubscribe_after_ms must be greater than stale_after_ms")
+        return self
 
 
 class RiskConfig(_Model):
@@ -113,14 +161,183 @@ class RiskConfig(_Model):
     max_l2_trades_per_day: Annotated[int, Field(ge=0)] | None = None
     l2_risk_fraction: Fraction = Decimal("0.5")
     min_stop_distance_bp: PositiveDecimal | None = None
+    # Volatility stop floor: a stop is at least this many times the symbol's
+    # recent 15-minute range from entry (and never closer than min_stop_distance_bp).
+    stop_floor_range_multiple: Annotated[Decimal, Field(ge=1, le=5)] = Decimal(1)
     max_spread_bp: PositiveDecimal | None = None
-    min_top_of_book_notional: PositiveDecimal | None = None
+    # Resting notional on each side of the book, counting the levels within
+    # book_depth_band_bp of that side's best price (0: the best level only).
+    min_book_depth_notional: PositiveDecimal | None = None
+    book_depth_band_bp: Annotated[Decimal, Field(ge=0, le=200)] = Decimal(25)
     # Stop must be at most this fraction of the distance from entry to liquidation.
     liquidation_buffer_fraction: Fraction | None = None
     max_snapshot_age_ms: Annotated[int, Field(ge=1)] = 2_000
+    # Expected slippage of the market order a stop sends, beyond its trigger price.
+    # Sizing counts it as a cost, with the fees.
+    stop_slippage_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(5)
+    # A target, when set, must be worth at least this many times the risk to the
+    # stop, costs included on both sides. Trades without a target are allowed.
+    min_reward_risk: Annotated[Decimal, Field(ge=0, le=20)] = Decimal(2)
 
     def unset_fields(self) -> list[str]:
         return sorted(name for name, value in self if value is None)
+
+
+class FeaturesConfig(_Model):
+    """Feature and regime computation (overview §3.4). Not learnable (ADR-0010)."""
+
+    opening_range_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+    # Width of a volume-profile price bucket, in bp of the session open.
+    profile_bucket_bp: Annotated[Decimal, Field(gt=0, le=100)] = Decimal(5)
+    value_area_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.7")
+    # 1-minute returns used for realized volatility and the expected move.
+    realized_vol_minutes: Annotated[int, Field(ge=10, le=240)] = 60
+    # Prior sessions loaded for ticker performance, character and key levels.
+    history_sessions: Annotated[int, Field(ge=2, le=40)] = 10
+    # Regime: session range so far vs the usual range for the time elapsed.
+    expansion_ratio: Annotated[Decimal, Field(gt=1, le=5)] = Decimal("1.3")
+    compressed_ratio: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.7")
+    # Regime: a trend moves at least this share of its range net, and crosses
+    # VWAP at most this often.
+    trend_efficiency: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.5")
+    max_trend_vwap_crosses: Annotated[int, Field(ge=0, le=50)] = 3
+    # No regime label before this much of the session has traded.
+    regime_min_minutes: Annotated[int, Field(ge=1, le=60)] = 15
+    # Venue volume can be thin or stale on some symbols. When fewer than this
+    # share of the session's minutes traded, VWAP and the profile are
+    # time-weighted (from mark-filled bars) instead of volume-weighted.
+    min_traded_minutes_share: Annotated[Decimal, Field(ge=0, le=1)] = Decimal("0.5")
+
+
+class TriggersConfig(_Model):
+    """When the engine wakes the agent (overview §3.4). The check-in interval is in ``agent``."""
+
+    # A large move: at least large_move_sigma × the 1-minute volatility scaled
+    # to large_move_seconds, and at least large_move_min_bp.
+    large_move_seconds: Annotated[int, Field(ge=5, le=900)] = 60
+    large_move_sigma: Annotated[Decimal, Field(gt=0, le=20)] = Decimal(3)
+    large_move_min_bp: Annotated[Decimal, Field(ge=0, le=500)] = Decimal(15)
+    # Without a 1-minute volatility yet, the threshold is at least this share of
+    # the 15-minute range.
+    large_move_range_fraction: Annotated[Decimal, Field(ge=0, le=2)] = Decimal("0.5")
+    # After a large move, the symbol's next ones wait this long, unless price
+    # has gone this many thresholds beyond where the last one fired.
+    large_move_cooldown_seconds: Annotated[int, Field(ge=0, le=1_800)] = 300
+    large_move_escalation: Annotated[Decimal, Field(ge=1, le=10)] = Decimal(2)
+    # Position events: the stop is this close (share of the entry-to-stop
+    # distance left), the target this far along, or the time stop this near.
+    approaching_stop_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.25")
+    approaching_target_fraction: Annotated[Decimal, Field(gt=0, lt=1)] = Decimal("0.8")
+    time_stop_warning_minutes: Annotated[int, Field(ge=0, le=30)] = 2
+
+
+class SimConfig(_Model):
+    """Paper/backtest fill simulator (overview §3.9, ADR-0005).
+
+    Fee rates are the account's tier rates; with no account in paper mode they
+    default to tier 0 (venue research §8). ``starting_collateral`` is capital,
+    so it stays ``None`` until the owner sets it.
+    """
+
+    # An order reaches the simulated venue this long after it is sent, and
+    # fills against the first book published at or after that moment.
+    latency_ms: Annotated[int, Field(ge=0, le=5_000)] = 250
+    taker_fee_rate: Annotated[Decimal, Field(ge=0, lt=Decimal("0.01"))] = Decimal("0.0004")
+    # Negative at the top tiers (a rebate).
+    maker_fee_rate: Annotated[Decimal, Field(gt=Decimal("-0.01"), lt=Decimal("0.01"))] = Decimal(
+        "0.000125"
+    )
+    starting_collateral: PositiveDecimal | None = None
+
+
+class ExecutionConfig(_Model):
+    """Order handling (overview §3.8). Not capital-dependent, so it has defaults."""
+
+    # A limit entry still working after this long is cancelled.
+    entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 120
+    # The longest timeout the agent may ask for on a single limit entry.
+    max_entry_timeout_seconds: Annotated[int, Field(ge=1, le=3_600)] = 900
+    # Exits are reduce-only IOC orders limited this far through the mark, so a
+    # thin book cannot fill them at any price.
+    exit_slippage_bp: Annotated[Decimal, Field(gt=0, le=500)] = Decimal(50)
+    # Engine-run trailing stops and breakeven moves (ADR-0009): a stop moves at
+    # most once per interval, and only by at least this step.
+    trail_min_interval_seconds: Annotated[int, Field(ge=1, le=300)] = 5
+    trail_min_step_bp: Annotated[Decimal, Field(ge=0, le=100)] = Decimal(2)
+
+
+class GuardianConfig(_Model):
+    """The guardian (overview §3.10): window close-out, kill switch, liveness, incidents.
+
+    Not learnable (ADR-0010).
+    """
+
+    # Engaged for the whole session when true, or when ``kill_switch_file``
+    # exists: everything is closed and no new entries are allowed.
+    kill_switch: bool = False
+    kill_switch_file: str = "data/KILL_SWITCH"
+    # New entries are held while the agent has made no tool call for this long
+    # (a call in progress, such as a waiting ``next_event``, counts as alive).
+    agent_timeout_seconds: Annotated[int, Field(ge=60, le=3_600)] = 600
+    # A symbol whose data stays stale this long inside the window is an incident.
+    stale_incident_seconds: Annotated[int, Field(ge=1, le=3_600)] = 30
+    # How often ledger and venue positions are compared; a difference seen on
+    # two checks in a row holds new entries for the rest of the session.
+    reconcile_interval_seconds: Annotated[int, Field(ge=5, le=3_600)] = 60
+    # Equity is sampled this often for the daily report's drawdown.
+    equity_sample_seconds: Annotated[int, Field(ge=5, le=3_600)] = 60
+
+
+class BacktestConfig(_Model):
+    """The playbook backtest and its Gate 1 screen (go-no-go.md, ADR-0008). Not learnable."""
+
+    # The rolling window screened, in calendar days before the run date.
+    window_days: Annotated[int, Field(ge=7, le=365)] = 91
+    # Minute bars, trade candles and funding by symbol and day (git-ignored).
+    data_dir: str = "data/backtest"
+    # Requests to the venue in flight at once while filling the data cache.
+    max_concurrent_requests: Annotated[int, Field(ge=1, le=16)] = 4
+    # A marketable entry fills this far through the mark (half the spread
+    # plus impact), on top of the taker fee.
+    marketable_slippage_bp: Annotated[Decimal, Field(ge=0, le=100)] = Decimal(3)
+    # Gate 1: in-target net expectancy per trade, in R, must be at least this.
+    min_expectancy_r: Decimal = Decimal(0)
+    # Gate 1: no single trade may account for more than this share of net PnL.
+    max_trade_share: Fraction = Decimal("0.25")
+    # Trades listed per playbook for the reviewed sample.
+    review_sample: Annotated[int, Field(ge=0, le=100)] = 10
+    # The window's last days, reported apart as a hold-out: tune playbooks on
+    # the days before it and check them once on it. Gate 1 uses the whole window.
+    holdout_days: Annotated[int, Field(ge=0, le=90)] = 21
+
+
+class LearningConfig(_Model):
+    """The learning loop's evidence rules (ADR-0010). Defined in ``main``; not learnable."""
+
+    # A lesson is used in decisions (active) once this many reviewed decisions support it ...
+    min_support: Annotated[int, Field(ge=2, le=20)] = 3
+    # ... and at most this share of its evidence contradicts it. More than that retires it.
+    max_contradiction_share: Annotated[Decimal, Field(ge=0, le=Decimal("0.5"))] = Decimal("0.34")
+    # Sessions the briefing's record by read and calibration cover.
+    record_sessions: Annotated[int, Field(ge=5, le=60)] = 20
+    # Lessons listed in the briefing, per status (active, candidate).
+    briefing_lessons: Annotated[int, Field(ge=1, le=50)] = 12
+
+
+class ResultsConfig(_Model):
+    """Publishing ``results/<date>/`` to the results branch (ADR-0006)."""
+
+    branch: str = "paper-results"
+    remote: str = "origin"
+    # Push attempts, with 2, 4, 8 ... seconds between them.
+    push_attempts: Annotated[int, Field(ge=1, le=8)] = 4
+
+    @field_validator("branch")
+    @classmethod
+    def _not_main(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", value) or value in ("main", "master"):
+            raise ValueError(f"results branch must be a dedicated branch name, got {value!r}")
+        return value
 
 
 class LiveConfig(_Model):
@@ -141,6 +358,8 @@ class SymbolConfig(_Model):
     symbol: str
     enabled: bool = True
     autonomy: AutonomyConfig = AutonomyConfig()
+    # Short, factual notes on how the symbol trades, for the agent's briefing.
+    notes: str | None = None
 
     @field_validator("symbol")
     @classmethod
@@ -155,7 +374,16 @@ class AppConfig(_Model):
     venue: VenueConfig = VenueConfig()
     session: SessionConfig = SessionConfig()
     agent: AgentConfig = AgentConfig()
+    market: MarketDataConfig = MarketDataConfig()
+    features: FeaturesConfig = FeaturesConfig()
+    triggers: TriggersConfig = TriggersConfig()
     risk: RiskConfig = RiskConfig()
+    sim: SimConfig = SimConfig()
+    execution: ExecutionConfig = ExecutionConfig()
+    guardian: GuardianConfig = GuardianConfig()
+    backtest: BacktestConfig = BacktestConfig()
+    learning: LearningConfig = LearningConfig()
+    results: ResultsConfig = ResultsConfig()
     live: LiveConfig = LiveConfig()
     symbols: tuple[SymbolConfig, ...]
 

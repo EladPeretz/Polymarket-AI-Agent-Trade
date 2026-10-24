@@ -1,0 +1,25 @@
+{
+ "data": [
+  {
+   "trade_id": 596559785122272,
+   "instrument_id": 19,
+   "side": "long",
+   "price": "215.57",
+   "quantity": "38.1978",
+   "settlement": false,
+   "timestamp": 1792498685911,
+   "hash": "0x"
+  },
+  {
+   "trade_id": 6831789701357533,
+   "instrument_id": 19,
+   "side": "long",
+   "price": "215.57",
+   "quantity": "8.1492",
+   "settlement": false,
+   "timestamp": 1792498685910,
+   "hash": "0x"
+  }
+ ],
+ "more": false
+}
