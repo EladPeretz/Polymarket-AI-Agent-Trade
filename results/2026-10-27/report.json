@@ -1,0 +1,265 @@
+{
+ "day": "2026-10-27",
+ "mode": "paper",
+ "generated_at": "2026-10-27T16:15:15.711051Z",
+ "symbols": [
+  "NVDA-USD",
+  "TSLA-USD",
+  "MSFT-USD",
+  "HOOD-USD",
+  "MSTR-USD",
+  "WTIOIL-USD"
+ ],
+ "incidents": [],
+ "start_equity": "500",
+ "end_equity": "496.61344030373430",
+ "return_fraction": "-0.0067731193925314",
+ "gross_pnl": "-2.239341",
+ "fees": "1.1453688892",
+ "funding": "-0.00184980706570",
+ "net_pnl": "-3.38655969626570",
+ "max_drawdown": "6.09841452866570",
+ "max_drawdown_fraction": "0.0121968290573314",
+ "trades": [
+  {
+   "symbol": "TSLA-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T13:38:11.503000Z",
+   "closed_at": "2026-10-27T14:25:59.303000Z",
+   "holding_minutes": "47.8",
+   "max_quantity": "0.4248",
+   "average_entry": "400.39",
+   "average_exit": "401.51",
+   "gross_pnl": "0.475776",
+   "fees": "0.1362588480",
+   "funding": "-0.00106845165000",
+   "net_pnl": "0.33844870035000",
+   "approved_risk": "2.4494477760",
+   "r_multiple": "0.1381734706353665896651474475",
+   "exit_reason": "TSLA regime flipped from trend_up to rotation and price is now under VWAP (401.84) with no aggressive buyers; the balance scenario is playing out, not the continuation. Take the small profit."
+  },
+  {
+   "symbol": "MSFT-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T13:45:30.502000Z",
+   "closed_at": "2026-10-27T14:25:58.602000Z",
+   "holding_minutes": "40.5",
+   "max_quantity": "0.4173",
+   "average_entry": "531.19",
+   "average_exit": "530.6125712916367121974598610",
+   "gross_pnl": "0.240961",
+   "fees": "0.1772360852",
+   "funding": "0.00138141948750",
+   "net_pnl": "0.06510633428750",
+   "approved_risk": "1.7497096890",
+   "r_multiple": "0.03720979239973792018019739045",
+   "exit_reason": "MSFT is back above VWAP (530.34) with 9 VWAP crosses: the session turned into a rotation and the trapped-longs unwind has run its course at the 528.6 low. Take the small profit rather than wait for the stop."
+  },
+  {
+   "symbol": "MSTR-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T13:47:17.505000Z",
+   "closed_at": "2026-10-27T14:13:08.214000Z",
+   "holding_minutes": "25.8",
+   "max_quantity": "0.682",
+   "average_entry": "140.38",
+   "average_exit": "140.55",
+   "gross_pnl": "-0.11594",
+   "fees": "0.076637704",
+   "funding": "0.0005947040000",
+   "net_pnl": "-0.1919830000000",
+   "approved_risk": "2.097108398",
+   "r_multiple": "-0.09154653149216943815796020669",
+   "exit_reason": "MSTR made a new low at 138.85 and was bought straight back above VWAP (140.18). My read needed VWAP to cap rallies; it did not, and the low sweep was reclaimed. This is a two-way rotation, not a trapped-longs unwind. Exit near flat."
+  },
+  {
+   "symbol": "NVDA-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T14:13:32.604000Z",
+   "closed_at": "2026-10-27T14:27:35.903000Z",
+   "holding_minutes": "14.1",
+   "max_quantity": "1.2663",
+   "average_entry": "216.12",
+   "average_exit": "217.0412808971017926241806839",
+   "gross_pnl": "-1.166618",
+   "fees": "0.2194048520",
+   "funding": "0",
+   "net_pnl": "-1.3860228520",
+   "approved_risk": "1.7499252960",
+   "r_multiple": "-0.7920468691824659468206235931",
+   "exit_reason": "NVDA reclaimed VWAP and the prior close; the vwap_caps_rallies assumption failed and the whole tech group has turned to rotation. Cut before the stop."
+  },
+  {
+   "symbol": "MSTR-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T14:30:22.004000Z",
+   "closed_at": "2026-10-27T15:09:58.804000Z",
+   "holding_minutes": "39.6",
+   "max_quantity": "1.147",
+   "average_entry": "140.83",
+   "average_exit": "139.87",
+   "gross_pnl": "-1.10112",
+   "fees": "0.128785160",
+   "funding": "-0.0015106513032",
+   "net_pnl": "-1.2314158113032",
+   "approved_risk": "1.745603242",
+   "r_multiple": "-0.7054385450684216820445158179",
+   "exit_reason": "MSTR lost VWAP (140.36) and is back at the open/POC 139.9 after failing to retest 141.9. The vwap_holds_as_support assumption failed and the OI build did not produce follow-through: pure rotation. Cut before the stop."
+  },
+  {
+   "symbol": "WTIOIL-USD",
+   "direction": "short",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T15:15:23.701000Z",
+   "closed_at": "2026-10-27T15:55:16.201000Z",
+   "holding_minutes": "39.9",
+   "max_quantity": "3.096",
+   "average_entry": "99.988",
+   "average_exit": "100.35",
+   "gross_pnl": "-1.120752",
+   "fees": "0.2480985792",
+   "funding": "0",
+   "net_pnl": "-1.3688505792",
+   "approved_risk": "1.7411074272",
+   "r_multiple": "-0.7861953592383136322996899568",
+   "exit_reason": "stop_loss"
+  },
+  {
+   "symbol": "TSLA-USD",
+   "direction": "long",
+   "level": "L2",
+   "source": "discretionary",
+   "opened_at": "2026-10-27T15:30:20.007000Z",
+   "closed_at": "2026-10-27T16:06:34.603000Z",
+   "holding_minutes": "36.2",
+   "max_quantity": "0.4896",
+   "average_entry": "405.25",
+   "average_exit": "406.37",
+   "gross_pnl": "0.548352",
+   "fees": "0.1589476608",
+   "funding": "-0.00124682760000",
+   "net_pnl": "0.38815751160000",
+   "approved_risk": "1.7401372992",
+   "r_multiple": "0.2230614284162802226772704534",
+   "exit_reason": "stop_loss"
+  }
+ ],
+ "open_at_end": [],
+ "by_level": [
+  {
+   "key": "L2",
+   "trades": 7,
+   "wins": 3,
+   "net_pnl": "-3.38655969626570",
+   "total_r": "-1.976782613529985966800174284",
+   "average_r": "-0.2823975162185694238285963263"
+  }
+ ],
+ "by_source": [
+  {
+   "key": "discretionary",
+   "trades": 7,
+   "wins": 3,
+   "net_pnl": "-3.38655969626570",
+   "total_r": "-1.976782613529985966800174284",
+   "average_r": "-0.2823975162185694238285963263"
+  }
+ ],
+ "by_symbol": [
+  {
+   "key": "MSFT-USD",
+   "trades": 1,
+   "wins": 1,
+   "net_pnl": "0.06510633428750",
+   "total_r": "0.03720979239973792018019739045",
+   "average_r": "0.03720979239973792018019739045"
+  },
+  {
+   "key": "MSTR-USD",
+   "trades": 2,
+   "wins": 0,
+   "net_pnl": "-1.4233988113032",
+   "total_r": "-0.7969850765605911202024760246",
+   "average_r": "-0.3984925382802955601012380123"
+  },
+  {
+   "key": "NVDA-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-1.3860228520",
+   "total_r": "-0.7920468691824659468206235931",
+   "average_r": "-0.7920468691824659468206235931"
+  },
+  {
+   "key": "TSLA-USD",
+   "trades": 2,
+   "wins": 2,
+   "net_pnl": "0.72660621195000",
+   "total_r": "0.3612348990516468123424179009",
+   "average_r": "0.1806174495258234061712089504"
+  },
+  {
+   "key": "WTIOIL-USD",
+   "trades": 1,
+   "wins": 0,
+   "net_pnl": "-1.3688505792",
+   "total_r": "-0.7861953592383136322996899568",
+   "average_r": "-0.7861953592383136322996899568"
+  }
+ ],
+ "decisions": {
+  "enter": 9,
+  "stand_aside": 3,
+  "adjust": 4,
+  "close": 5,
+  "note": 3
+ },
+ "verdicts": {
+  "approved": 7,
+  "rejected": 2
+ },
+ "rejections": [
+  {
+   "at": "2026-10-27T13:45:22.314905Z",
+   "symbol": "MSFT-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "reward_risk"
+   ],
+   "detail": "target 525.40 is worth 1.08R after costs, minimum 1.3R"
+  },
+  {
+   "at": "2026-10-27T15:10:16.948175Z",
+   "symbol": "MSFT-USD",
+   "level": "L2",
+   "decision": "rejected",
+   "checks": [
+    "reward_risk"
+   ],
+   "detail": "target 531.45 is worth 0.57R after costs, minimum 1.3R"
+  }
+ ],
+ "resizes": [],
+ "failures": [],
+ "latency": {
+  "events": 63,
+  "answered": 63,
+  "pickup_median_seconds": 0.014594,
+  "pickup_max_seconds": 14.533974,
+  "answer_median_seconds": 5.122836,
+  "answer_p90_seconds": 14.085307,
+  "answer_max_seconds": 16.62222
+ }
+}
